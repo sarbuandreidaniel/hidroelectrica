@@ -20,6 +20,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import slugify
 
 from .const import DOMAIN
 from .coordinator import HidroelectricaCoordinator
@@ -62,6 +63,15 @@ def _to_date(date_str: str | None) -> date | None:
         return date(int(parts[2]), int(parts[1]), int(parts[0]))
     except (ValueError, IndexError):
         return None
+
+
+def _device_slug(data: dict | None) -> str:
+    """Return a stable device slug for entity and unique IDs."""
+    meter = data.get("meter", {}) if isinstance(data, dict) else {}
+    pod = meter.get("pod") if isinstance(meter, dict) else None
+    serial_number = meter.get("serial_number") if isinstance(meter, dict) else None
+    slug = slugify(str(pod or serial_number or "account"))
+    return slug or "account"
 
 
 # ------------------------------------------------------------------
@@ -270,7 +280,9 @@ class HidroelectricaSensor(
     ) -> None:
         super().__init__(coordinator)
         self.entity_description = description
-        self._attr_unique_id = f"{entry.entry_id}_{description.key}"
+        object_id = f"{DOMAIN}_{_device_slug(coordinator.data)}_{description.key}"
+        self._attr_unique_id = object_id
+        self._attr_suggested_object_id = object_id
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
             name="Hidroelectrica",
@@ -314,7 +326,11 @@ class HidroelectricaInvoiceHistorySensor(
         self._year = year
         self._produced = produced
         suffix = "produced" if produced else "consumed"
-        self._attr_unique_id = f"{entry.entry_id}_invoice_history_{suffix}_{year}"
+        object_id = (
+            f"{DOMAIN}_{_device_slug(coordinator.data)}_invoice_history_{suffix}_{year}"
+        )
+        self._attr_unique_id = object_id
+        self._attr_suggested_object_id = object_id
         self._attr_translation_key = (
             "invoice_history_produced" if produced else "invoice_history"
         )
