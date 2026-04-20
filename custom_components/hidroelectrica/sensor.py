@@ -15,7 +15,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import UnitOfEnergy
+from homeassistant.const import UnitOfEnergy, UnitOfTime
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -138,7 +138,7 @@ SENSOR_DESCRIPTIONS: tuple[HidroelectricaSensorEntityDescription, ...] = (
         key="days_until_due",
         translation_key="days_until_due",
         icon="mdi:calendar-range",
-        native_unit_of_measurement="days",
+        native_unit_of_measurement=UnitOfTime.DAYS,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda d: _days_until(d.get("billing", {}).get("BillDue")),
     ),
@@ -219,33 +219,6 @@ SENSOR_DESCRIPTIONS: tuple[HidroelectricaSensorEntityDescription, ...] = (
         state_class=SensorStateClass.TOTAL,
         suggested_display_precision=1,
         value_fn=lambda d: d.get("usage", {}).get("last_month_kwh"),
-    ),
-    HidroelectricaSensorEntityDescription(
-        key="last_month_cost",
-        translation_key="last_month_cost",
-        icon="mdi:cash",
-        native_unit_of_measurement=CURRENCY_RON,
-        state_class=SensorStateClass.MEASUREMENT,
-        suggested_display_precision=2,
-        value_fn=lambda d: d.get("usage", {}).get("last_month_cost"),
-    ),
-    HidroelectricaSensorEntityDescription(
-        key="monthly_avg_cost",
-        translation_key="monthly_avg_cost",
-        icon="mdi:chart-bar",
-        native_unit_of_measurement=CURRENCY_RON,
-        state_class=SensorStateClass.MEASUREMENT,
-        suggested_display_precision=2,
-        value_fn=lambda d: d.get("usage", {}).get("monthly_avg_cost"),
-    ),
-    HidroelectricaSensorEntityDescription(
-        key="monthly_max_cost",
-        translation_key="monthly_max_cost",
-        icon="mdi:chart-areaspline",
-        native_unit_of_measurement=CURRENCY_RON,
-        state_class=SensorStateClass.MEASUREMENT,
-        suggested_display_precision=2,
-        value_fn=lambda d: d.get("usage", {}).get("monthly_max_cost"),
     ),
 )
 
