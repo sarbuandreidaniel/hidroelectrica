@@ -131,6 +131,22 @@ automation:
 | Date vechi | Intervalul implicit de actualizare este 5 minute; repornește integrarea pentru o actualizare forțată |
 | Index energie produsă mereu 0 | Normal dacă nu ai instalație fotovoltaică înregistrată |
 
+### Script de depanare
+
+Testează autentificarea și toate endpoint-urile independent de Home Assistant:
+
+```bash
+cd /path/to/ha-hidroelectrica
+pip install aiohttp python-dotenv
+python3 scripts/test.py
+```
+
+Sau cu credențiale din variabile de mediu:
+
+```bash
+HIDRO_USERNAME=userul_tau HIDRO_PASSWORD=parola_ta python3 scripts/test.py
+```
+
 ---
 
 ## Confidențialitate și securitate
@@ -147,18 +163,21 @@ automation:
 ### Structura proiectului
 
 ```
-custom_components/hidroelectrica/
-├── __init__.py           # Configurare integrare și coordinator
-├── api.py                # Client API iHidro
-├── auth.py               # Autentificare portal
-├── config_flow.py        # Flux de configurare UI
-├── const.py              # Constante
-├── coordinator.py        # DataUpdateCoordinator
-├── sensor.py             # Entități senzori
-├── manifest.json         # Metadate integrare
-└── translations/
-    ├── en.json           # Traduceri engleze
-    └── ro.json           # Traduceri române
+ha-hidroelectrica/
+├── custom_components/hidroelectrica/
+│   ├── __init__.py           # Configurare integrare și coordinator
+│   ├── api.py                # Client API iHidro
+│   ├── auth.py               # Autentificare portal
+│   ├── config_flow.py        # Flux de configurare UI
+│   ├── const.py              # Constante
+│   ├── coordinator.py        # DataUpdateCoordinator
+│   ├── sensor.py             # Entități senzori
+│   ├── manifest.json         # Metadate integrare
+│   └── translations/
+│       ├── en.json           # Traduceri engleze
+│       └── ro.json           # Traduceri române
+└── scripts/
+    └── test.py               # Script de depanare (testare în afara HA)
 ```
 
 ### Contribuții
