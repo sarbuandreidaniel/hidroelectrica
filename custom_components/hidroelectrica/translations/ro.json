@@ -42,7 +42,9 @@
       "last_month_cost": {"name": "Cost luna anterioară"},
       "monthly_avg_cost": {"name": "Cost mediu lunar"},
       "monthly_max_cost": {"name": "Vârf consum anual"},
-      "invoice_history": {"name": "Istoricul facturării {year}"},
+    "invoice_history": {
+        "name": "Istoric facturi {year}"
+    },
       "invoice_history_produced": {"name": "Istoricul energiei produse {year}"}
     }
   }

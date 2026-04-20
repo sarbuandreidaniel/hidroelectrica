@@ -65,6 +65,37 @@ def _to_date(date_str: str | None) -> date | None:
         return None
 
 
+def _fmt_date(value: Any) -> str | None:
+    """Parse any common date format and return DD/MM/YYYY, stripping time if present."""
+    if not value:
+        return None
+    s = str(value).strip().split(" ")[0].split("T")[0]  # drop time component
+    # Try ISO: YYYY-MM-DD
+    if len(s) == 10 and s[4] == "-":
+        try:
+            d = date.fromisoformat(s)
+            return d.strftime("%d/%m/%Y")
+        except ValueError:
+            pass
+    # Try DD/MM/YYYY
+    try:
+        parts = s.split("/")
+        if len(parts) == 3:
+            d = date(int(parts[2]), int(parts[1]), int(parts[0]))
+            return d.strftime("%d/%m/%Y")
+    except (ValueError, IndexError):
+        pass
+    # Try DD.MM.YYYY
+    try:
+        parts = s.split(".")
+        if len(parts) == 3:
+            d = date(int(parts[2]), int(parts[1]), int(parts[0]))
+            return d.strftime("%d/%m/%Y")
+    except (ValueError, IndexError):
+        pass
+    return str(value)
+
+
 def _device_slug(data: dict | None) -> str:
     """Return a stable device slug for entity and unique IDs."""
     meter = data.get("meter", {}) if isinstance(data, dict) else {}
@@ -164,7 +195,7 @@ SENSOR_DESCRIPTIONS: tuple[HidroelectricaSensorEntityDescription, ...] = (
         key="last_reading_date",
         translation_key="last_reading_date",
         icon="mdi:calendar-today",
-        value_fn=lambda d: d.get("meter", {}).get("reading_date"),
+        value_fn=lambda d: _fmt_date(d.get("meter", {}).get("reading_date")),
     ),
     HidroelectricaSensorEntityDescription(
         key="meter_serial",
