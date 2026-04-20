@@ -28,8 +28,9 @@
       "bill_due_date": {"name": "Dată scadentă"},
       "days_until_due": {"name": "Zile până la scadență"},
       "invoice_amount": {"name": "Sumă factură neachitată"},
-      "invoice_due_date": {"name": "Scadență factură"},
-      "invoice_number": {"name": "Număr factură"},
+    "invoice_due_date": {
+        "name": "Scadență factură"
+    },
       "invoice_overdue": {"name": "Factură restantă"},
       "meter_consumed": {"name": "Index energie activă consumată"},
       "meter_produced": {"name": "Index energie activă produsă"},

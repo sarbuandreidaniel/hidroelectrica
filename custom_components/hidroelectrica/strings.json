@@ -28,8 +28,9 @@
       "bill_due_date": {"name": "Due Date"},
       "days_until_due": {"name": "Days Until Due"},
       "invoice_amount": {"name": "Unpaid Invoice Amount"},
-      "invoice_due_date": {"name": "Invoice Due Date"},
-      "invoice_number": {"name": "Invoice Number"},
+      "invoice_due_date": {
+        "name": "Invoice Due Date"
+      },
       "invoice_overdue": {"name": "Invoice Overdue"},
       "meter_consumed": {"name": "Active Energy Consumed Index"},
       "meter_produced": {"name": "Active Energy Produced Index"},

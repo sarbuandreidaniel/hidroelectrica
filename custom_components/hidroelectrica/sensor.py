@@ -101,8 +101,7 @@ SENSOR_DESCRIPTIONS: tuple[HidroelectricaSensorEntityDescription, ...] = (
         key="bill_due_date",
         translation_key="bill_due_date",
         icon="mdi:calendar-clock",
-        device_class=SensorDeviceClass.DATE,
-        value_fn=lambda d: _to_date(d.get("billing", {}).get("BillDue")),
+        value_fn=lambda d: d.get("billing", {}).get("BillDue"),
     ),
     HidroelectricaSensorEntityDescription(
         key="days_until_due",
@@ -126,14 +125,7 @@ SENSOR_DESCRIPTIONS: tuple[HidroelectricaSensorEntityDescription, ...] = (
         key="invoice_due_date",
         translation_key="invoice_due_date",
         icon="mdi:calendar-check",
-        device_class=SensorDeviceClass.DATE,
-        value_fn=lambda d: _to_date(d.get("unpaid_invoices", {}).get("dueDate")),
-    ),
-    HidroelectricaSensorEntityDescription(
-        key="invoice_number",
-        translation_key="invoice_number",
-        icon="mdi:receipt",
-        value_fn=lambda d: d.get("unpaid_invoices", {}).get("invoiceID"),
+        value_fn=lambda d: d.get("unpaid_invoices", {}).get("dueDate"),
     ),
     HidroelectricaSensorEntityDescription(
         key="invoice_overdue",
