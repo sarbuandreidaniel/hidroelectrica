@@ -1,0 +1,48 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Configurare Hidroelectrica",
+        "description": "Introduceți datele de autentificare ale contului Hidroelectrica",
+        "data": {
+          "username": "Utilizator sau Email",
+          "password": "Parolă"
+        }
+      }
+    },
+    "error": {
+      "missing_username": "Numele de utilizator este obligatoriu",
+      "missing_password": "Parola este obligatorie",
+      "invalid_auth": "Credențiale invalide. Verificați utilizatorul și parola.",
+      "cannot_connect": "Conexiunea la serviciile Hidroelectrica a eșuat",
+      "unknown": "A apărut o eroare neașteptată"
+    },
+    "abort": {
+      "already_configured": "Hidroelectrica este deja configurată",
+      "already_in_progress": "Configurarea este deja în curs"
+    }
+  },
+  "entity": {
+    "sensor": {
+      "balance": {"name": "Sold curent"},
+      "bill_due_date": {"name": "Dată scadentă"},
+      "days_until_due": {"name": "Zile până la scadență"},
+      "invoice_amount": {"name": "Sumă factură neachitată"},
+      "invoice_due_date": {"name": "Scadență factură"},
+      "invoice_number": {"name": "Număr factură"},
+      "invoice_overdue": {"name": "Factură restantă"},
+      "meter_consumed": {"name": "Index energie activă consumată"},
+      "meter_produced": {"name": "Index energie activă produsă"},
+      "meter_estimated": {"name": "Index estimat curent"},
+      "last_reading_date": {"name": "Data ultimei citiri"},
+      "meter_serial": {"name": "Serie contor"},
+      "pod": {"name": "POD"},
+      "last_month_kwh": {"name": "Consum luna anterioară"},
+      "last_month_cost": {"name": "Cost luna anterioară"},
+      "monthly_avg_cost": {"name": "Cost mediu lunar"},
+      "monthly_max_cost": {"name": "Vârf consum anual"},
+      "invoice_history": {"name": "Istoricul facturării {year}"},
+      "invoice_history_produced": {"name": "Istoricul energiei produse {year}"}
+    }
+  }
+}

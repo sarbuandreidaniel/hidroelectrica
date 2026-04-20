@@ -1,0 +1,48 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Configure Hidroelectrica",
+        "description": "Enter your Hidroelectrica account credentials",
+        "data": {
+          "username": "Email or Username",
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "missing_username": "Username is required",
+      "missing_password": "Password is required",
+      "invalid_auth": "Invalid credentials. Please check your username and password.",
+      "cannot_connect": "Failed to connect to Hidroelectrica services",
+      "unknown": "An unexpected error occurred"
+    },
+    "abort": {
+      "already_configured": "Hidroelectrica is already configured",
+      "already_in_progress": "Configuration is already in progress"
+    }
+  },
+  "entity": {
+    "sensor": {
+      "balance": {"name": "Current Balance"},
+      "bill_due_date": {"name": "Due Date"},
+      "days_until_due": {"name": "Days Until Due"},
+      "invoice_amount": {"name": "Unpaid Invoice Amount"},
+      "invoice_due_date": {"name": "Invoice Due Date"},
+      "invoice_number": {"name": "Invoice Number"},
+      "invoice_overdue": {"name": "Invoice Overdue"},
+      "meter_consumed": {"name": "Active Energy Consumed Index"},
+      "meter_produced": {"name": "Active Energy Produced Index"},
+      "meter_estimated": {"name": "Current Estimated Index"},
+      "last_reading_date": {"name": "Last Reading Date"},
+      "meter_serial": {"name": "Meter Serial Number"},
+      "pod": {"name": "POD"},
+      "last_month_kwh": {"name": "Previous Month Consumption"},
+      "last_month_cost": {"name": "Previous Month Cost"},
+      "monthly_avg_cost": {"name": "Monthly Average Cost"},
+      "monthly_max_cost": {"name": "Annual Peak Cost"},
+      "invoice_history": {"name": "Invoice History {year}"},
+      "invoice_history_produced": {"name": "Produced Energy History {year}"}
+    }
+  }
+}

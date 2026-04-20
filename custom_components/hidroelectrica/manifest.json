@@ -1,0 +1,13 @@
+{
+  "domain": "hidroelectrica",
+  "name": "Hidroelectrica Romania",
+  "codeowners": [
+    "@sarbuandreidaniel"
+  ],
+  "config_flow": true,
+  "documentation": "https://github.com/sarbuandreidaniel/ha-hidroelectrica",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "requirements": [],
+  "version": "0.1.0"
+}
