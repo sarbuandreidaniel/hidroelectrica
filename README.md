@@ -1,7 +1,7 @@
 # Hidroelectrica România — Integrare Home Assistant
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://hacs.xyz)
-[![GitHub Release](https://img.shields.io/github/v/release/sarbuandreidaniel/ha-hidroelectrica?style=flat-square&label=Versiune)](https://github.com/sarbuandreidaniel/ha-hidroelectrica/releases)
+[![GitHub Release](https://img.shields.io/github/v/release/sarbuandreidaniel/hidroelectrica?style=flat-square&label=Versiune)](https://github.com/sarbuandreidaniel/hidroelectrica/releases)
 [![HA Min Version](https://img.shields.io/badge/Home%20Assistant-%3E%3D2024.1.0-blue?style=flat-square)](https://www.home-assistant.io)
 [![License: MIT](https://img.shields.io/badge/Licen%C8%9B%C4%83-MIT-green.svg?style=flat-square)](LICENSE)
 [![Susține](https://img.shields.io/badge/Sus%C8%9Bine-Buy%20Me%20a%20Coffee-yellow?style=flat-square&logo=buy-me-a-coffee)](https://www.buymeacoffee.com/sarbuandreidaniel)
@@ -37,7 +37,7 @@ O integrare profesională pentru Home Assistant care conectează contul tău **H
 1. Asigură-te că [HACS](https://hacs.xyz/) este instalat
 2. Mergi la **HACS → Integrări → ⋮ → Depozite personalizate**
 3. Adaugă:
-   - **URL:** `https://github.com/sarbuandreidaniel/ha-hidroelectrica`
+   - **URL:** `https://github.com/sarbuandreidaniel/hidroelectrica`
    - **Categorie:** Integration
 4. Caută **Hidroelectrica** și instalează
 5. Repornești Home Assistant
@@ -69,31 +69,33 @@ Integrarea se va autentifica, va prelua datele contorului tău și va crea autom
 
 | Senzor | Descriere | Unitate |
 |--------|-----------|---------|
-| `sensor.hidroelectrica_sold_curent` | Soldul curent al contului | RON |
-| `sensor.hidroelectrica_data_scadenta` | Data scadenței facturii curente | — |
-| `sensor.hidroelectrica_zile_pana_la_scadenta` | Zile rămase până la scadență | zile |
-| `sensor.hidroelectrica_suma_factura_neachitata` | Suma facturii neachitate | RON |
-| `sensor.hidroelectrica_scadenta_factura` | Data scadenței facturii neachitate | — |
-| `sensor.hidroelectrica_numar_factura` | Numărul facturii neachitate | — |
-| `sensor.hidroelectrica_factura_restanta` | Factură restantă da/nu | — |
-| `sensor.hidroelectrica_index_energie_activa_consumata` | Index energie activă consumată | kWh |
-| `sensor.hidroelectrica_index_energie_activa_produsa` | Index energie activă produsă (fotovoltaic) | kWh |
-| `sensor.hidroelectrica_index_estimat_curent` | Index estimat curent | kWh |
-| `sensor.hidroelectrica_data_ultimei_citiri` | Data ultimei citiri a contorului | — |
-| `sensor.hidroelectrica_serie_contor` | Seria contorului | — |
-| `sensor.hidroelectrica_pod` | Codul POD al locului de consum | — |
-| `sensor.hidroelectrica_consum_luna_anterioara` | Consum luna anterioară | kWh |
-| `sensor.hidroelectrica_cost_luna_anterioara` | Cost luna anterioară | RON |
-| `sensor.hidroelectrica_cost_mediu_lunar` | Costul mediu lunar | RON |
-| `sensor.hidroelectrica_varf_consum_anual` | Vârful de consum din ultimul an | RON |
-| `sensor.hidroelectrica_istoricul_facturarii_AAAA` | Istoricul facturării pentru anul AAAA | — |
-| `sensor.hidroelectrica_istoricul_energiei_produse_AAAA` | Istoricul facturilor energie produsă pentru AAAA | — |
+| `sensor.hidroelectrica_<pod>_balance` | Soldul curent al contului | RON |
+| `sensor.hidroelectrica_<pod>_unpaid_invoice` | Suma facturii neachitate | RON |
+| `sensor.hidroelectrica_<pod>_meter_consumed` | Index energie activă consumată | kWh |
+| `sensor.hidroelectrica_<pod>_meter_produced` | Index energie activă produsă (fotovoltaic) | kWh |
+| `sensor.hidroelectrica_<pod>_meter_estimated` | Index estimat curent | kWh |
+| `sensor.hidroelectrica_<pod>_last_reading_date` | Data ultimei citiri a contorului | — |
+| `sensor.hidroelectrica_<pod>_meter_serial` | Seria contorului | — |
+| `sensor.hidroelectrica_<pod>_pod` | Codul POD al locului de consum | — |
+| `sensor.hidroelectrica_<pod>_last_month_kwh` | Consum luna anterioară | kWh |
+| `sensor.hidroelectrica_<pod>_consumption_history_AAAA` | Consum total energie în anul AAAA | kWh |
+| `sensor.hidroelectrica_<pod>_invoice_history_consumed_AAAA` | Total facturat energie consumată în AAAA | RON |
+| `sensor.hidroelectrica_<pod>_invoice_history_produced_AAAA` | Total facturat energie produsă în AAAA | RON |
 
-> Senzorii de istoric sunt generați automat pentru **anul curent** și **anul precedent**.
+> `<pod>` este derivat automat din codul POD sau seria contorului. Senzorii de istoric sunt generați automat pentru **anul curent** și **anul precedent**.
 
-### Atribute senzori de istoric
+### Atribute senzori
 
-**`sensor.hidroelectrica_istoricul_facturarii_AAAA`** și **`sensor.hidroelectrica_istoricul_energiei_produse_AAAA`** includ:
+**`sensor.hidroelectrica_<pod>_unpaid_invoice`** include:
+- `due_date` — Data scadenței facturii neachitate
+- `days_until_due` — Zile rămase până la scadență
+- `overdue` — `true` dacă scadența a trecut
+
+**`sensor.hidroelectrica_<pod>_consumption_history_AAAA`** include:
+- Consum lunar (kWh) pentru fiecare lună disponibilă
+- `total_kwh`, `average_monthly_kwh`, `average_daily_kwh`
+
+**`sensor.hidroelectrica_<pod>_invoice_history_consumed_AAAA`** și **`sensor.hidroelectrica_<pod>_invoice_history_produced_AAAA`** includ:
 - `Invoice 1 DD/MM/YYYY` … `Invoice N DD/MM/YYYY` — suma fiecărei facturi în RON
 - `total_invoices` — numărul total de facturi din an
 - `total_amount_paid` — suma totală plătită în an (RON)
@@ -110,14 +112,13 @@ Exemplu — alertă când apare o factură restantă:
 automation:
   - alias: "Factură Hidroelectrica restantă"
     trigger:
-      - platform: state
-        entity_id: sensor.hidroelectrica_factura_restanta
-        to: "true"
+      - platform: template
+        value_template: "{{ state_attr('sensor.hidroelectrica_<pod>_unpaid_invoice', 'overdue') == true }}"
     action:
       - service: notify.mobile_app
         data:
           title: "Factură Hidroelectrica"
-          message: "Ai o factură restantă de {{ states('sensor.hidroelectrica_suma_factura_neachitata') }} RON"
+          message: "Ai o factură restantă de {{ states('sensor.hidroelectrica_<pod>_unpaid_invoice') }} RON"
 ```
 
 ---
