@@ -133,10 +133,19 @@ class HidroelectricaCoordinator(DataUpdateCoordinator):
             except Exception as err:  # noqa: BLE001
                 _LOGGER.warning("Could not fetch meter data: %s", err)
                 data["meter"] = {}
+
+            # Index history — full meter readings for consumption history sensors
+            try:
+                index_readings = await self._api.get_index_history(installation, pod)
+                data["index_history"] = _parse_index_history(index_readings)
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.warning("Could not fetch index history: %s", err)
+                data["index_history"] = {}
         else:
             data["meter"] = {}
+            data["index_history"] = {}
 
-        # Usage
+        # Usage — rolling 12-month window (usageyear parameter is ignored by the API)
         try:
             usage_raw = await self._api.get_usage()
             data["usage"] = _parse_usage(usage_raw)
@@ -157,6 +166,61 @@ class HidroelectricaCoordinator(DataUpdateCoordinator):
 # ------------------------------------------------------------------
 # Data-parsing helpers
 # ------------------------------------------------------------------
+
+
+def _parse_index_history(readings: list[dict]) -> dict:
+    """Build a dict of {(year, month): kwh} from raw index readings.
+
+    Each reading has a cumulative ``Index`` (kWh).  Monthly consumption is
+    derived as the delta between the first and last reading within each
+    calendar month (sorted by date), using only ``Registers == '1.8.0'``
+    (consumed energy).
+    """
+    from datetime import datetime as _dt
+
+    # Keep only consumed-energy readings with a parseable date
+    entries: list[tuple[_dt, int]] = []
+    for r in readings:
+        if r.get("Registers") != "1.8.0":
+            continue
+        date_str = r.get("Date", "")
+        index_val = r.get("Index")
+        if not date_str or index_val is None:
+            continue
+        try:
+            parts = date_str.strip().split("/")
+            if len(parts) == 3:
+                d = _dt(int(parts[2]), int(parts[1]), int(parts[0]))
+                entries.append((d, int(index_val)))
+        except (ValueError, TypeError):
+            continue
+
+    if not entries:
+        return {}
+
+    entries.sort(key=lambda x: x[0])
+
+    # Group by (year, month), keep min/max index
+    from collections import defaultdict
+    by_month: dict[tuple[int, int], list[int]] = defaultdict(list)
+    for dt, idx in entries:
+        by_month[(dt.year, dt.month)].append(idx)
+
+    # Consumption in a month = last index of month − last index of previous month
+    sorted_months = sorted(by_month.keys())
+    result: dict[tuple[int, int], float] = {}
+    for i, ym in enumerate(sorted_months):
+        if i == 0:
+            # First month: delta within the month itself
+            vals = by_month[ym]
+            result[ym] = float(max(vals) - min(vals))
+        else:
+            prev_ym = sorted_months[i - 1]
+            prev_last = max(by_month[prev_ym])
+            curr_last = max(by_month[ym])
+            result[ym] = float(max(0.0, curr_last - prev_last))
+
+    return result
 
 
 def _parse_meter_readings(readings: list[dict]) -> dict:

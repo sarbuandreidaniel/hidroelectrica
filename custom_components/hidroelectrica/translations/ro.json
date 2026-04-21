@@ -25,13 +25,9 @@
   "entity": {
     "sensor": {
       "balance": {"name": "Sold curent"},
-      "bill_due_date": {"name": "Dată scadentă"},
-      "days_until_due": {"name": "Zile până la scadență"},
-      "invoice_amount": {"name": "Sumă factură neachitată"},
-    "invoice_due_date": {
-        "name": "Scadență factură"
+    "unpaid_invoice": {
+        "name": "Factură neachitată"
     },
-      "invoice_overdue": {"name": "Factură restantă"},
       "meter_consumed": {"name": "Index energie activă consumată"},
       "meter_produced": {"name": "Index energie activă produsă"},
       "meter_estimated": {"name": "Index estimat curent"},
@@ -39,6 +35,9 @@
       "meter_serial": {"name": "Serie contor"},
       "pod": {"name": "POD"},
       "last_month_kwh": {"name": "Consum luna anterioară"},
+    "consumption_history_year": {
+        "name": "Consum electricitate {year}"
+    },
       "last_month_cost": {"name": "Cost luna anterioară"},
       "monthly_avg_cost": {"name": "Cost mediu lunar"},
       "monthly_max_cost": {"name": "Vârf consum anual"},

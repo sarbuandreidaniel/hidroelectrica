@@ -25,13 +25,9 @@
   "entity": {
     "sensor": {
       "balance": {"name": "Current Balance"},
-      "bill_due_date": {"name": "Due Date"},
-      "days_until_due": {"name": "Days Until Due"},
-      "invoice_amount": {"name": "Unpaid Invoice Amount"},
-      "invoice_due_date": {
-        "name": "Invoice Due Date"
+      "unpaid_invoice": {
+        "name": "Unpaid Invoice"
       },
-      "invoice_overdue": {"name": "Invoice Overdue"},
       "meter_consumed": {"name": "Active Energy Consumed Index"},
       "meter_produced": {"name": "Active Energy Produced Index"},
       "meter_estimated": {"name": "Current Estimated Index"},
@@ -39,6 +35,9 @@
       "meter_serial": {"name": "Meter Serial Number"},
       "pod": {"name": "POD"},
       "last_month_kwh": {"name": "Previous Month Consumption"},
+      "consumption_history_year": {
+        "name": "Electricity Consumption {year}"
+      },
       "last_month_cost": {"name": "Previous Month Cost"},
       "monthly_avg_cost": {"name": "Monthly Average Cost"},
       "monthly_max_cost": {"name": "Annual Peak Cost"},

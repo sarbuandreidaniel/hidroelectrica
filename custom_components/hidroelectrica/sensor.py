@@ -15,7 +15,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import UnitOfEnergy, UnitOfTime
+from homeassistant.const import UnitOfEnergy
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -77,11 +77,16 @@ def _fmt_date(value: Any) -> str | None:
             return d.strftime("%d/%m/%Y")
         except ValueError:
             pass
-    # Try DD/MM/YYYY
+    # Try DD/MM/YYYY or M/DD/YYYY (detect by checking which part exceeds 12)
     try:
         parts = s.split("/")
         if len(parts) == 3:
-            d = date(int(parts[2]), int(parts[1]), int(parts[0]))
+            a, b, c = int(parts[0]), int(parts[1]), int(parts[2])
+            # If b > 12, must be M/DD/YYYY (a=month, b=day, c=year)
+            if b > 12:
+                d = date(c, a, b)
+            else:
+                d = date(c, b, a)
             return d.strftime("%d/%m/%Y")
     except (ValueError, IndexError):
         pass
@@ -127,42 +132,6 @@ SENSOR_DESCRIPTIONS: tuple[HidroelectricaSensorEntityDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=2,
         value_fn=lambda d: _parse_ron(d.get("billing", {}).get("ToTalBalance")),
-    ),
-    HidroelectricaSensorEntityDescription(
-        key="bill_due_date",
-        translation_key="bill_due_date",
-        icon="mdi:calendar-clock",
-        value_fn=lambda d: d.get("billing", {}).get("BillDue"),
-    ),
-    HidroelectricaSensorEntityDescription(
-        key="days_until_due",
-        translation_key="days_until_due",
-        icon="mdi:calendar-range",
-        native_unit_of_measurement=UnitOfTime.DAYS,
-        state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda d: _days_until(d.get("billing", {}).get("BillDue")),
-    ),
-    # ── Latest unpaid invoice ─────────────────────────────────────────
-    HidroelectricaSensorEntityDescription(
-        key="invoice_amount",
-        translation_key="invoice_amount",
-        icon="mdi:file-document",
-        native_unit_of_measurement=CURRENCY_RON,
-        state_class=SensorStateClass.MEASUREMENT,
-        suggested_display_precision=2,
-        value_fn=lambda d: _parse_ron(d.get("unpaid_invoices", {}).get("amount")),
-    ),
-    HidroelectricaSensorEntityDescription(
-        key="invoice_due_date",
-        translation_key="invoice_due_date",
-        icon="mdi:calendar-check",
-        value_fn=lambda d: d.get("unpaid_invoices", {}).get("dueDate"),
-    ),
-    HidroelectricaSensorEntityDescription(
-        key="invoice_overdue",
-        translation_key="invoice_overdue",
-        icon="mdi:alert-circle",
-        value_fn=lambda d: bool(d.get("unpaid_invoices", {}).get("overdue", "")),
     ),
     # ── Meter ─────────────────────────────────────────────────────────
     HidroelectricaSensorEntityDescription(
@@ -242,6 +211,13 @@ async def async_setup_entry(
         HidroelectricaSensor(coordinator, entry, description)
         for description in SENSOR_DESCRIPTIONS
     ]
+    # Latest unpaid invoice (single sensor with attributes)
+    entities.append(HidroelectricaUnpaidInvoiceSensor(coordinator, entry))
+    # Consumption history (kWh per year)
+    entities += [
+        HidroelectricaConsumptionHistorySensor(coordinator, entry, current_year),
+        HidroelectricaConsumptionHistorySensor(coordinator, entry, current_year - 1),
+    ]
     # Consumed energy billing history (excludes produced-energy reports)
     entities += [
         HidroelectricaInvoiceHistorySensor(coordinator, entry, current_year, produced=False),
@@ -293,6 +269,139 @@ class HidroelectricaSensor(
         if self.coordinator.data is None:
             return None
         return self.entity_description.value_fn(self.coordinator.data)
+
+
+# ------------------------------------------------------------------
+# Unpaid invoice sensor
+# ------------------------------------------------------------------
+
+
+class HidroelectricaUnpaidInvoiceSensor(
+    CoordinatorEntity[HidroelectricaCoordinator], SensorEntity
+):
+    """Single sensor for the latest unpaid invoice; detail fields exposed as attributes."""
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "unpaid_invoice"
+    _attr_device_class = SensorDeviceClass.MONETARY
+    _attr_native_unit_of_measurement = CURRENCY_RON
+    _attr_state_class = SensorStateClass.TOTAL
+    _attr_suggested_display_precision = 2
+    _attr_icon = "mdi:file-document-alert"
+
+    def __init__(
+        self,
+        coordinator: HidroelectricaCoordinator,
+        entry: ConfigEntry,
+    ) -> None:
+        super().__init__(coordinator)
+        object_id = f"{DOMAIN}_{_device_slug(coordinator.data)}_unpaid_invoice"
+        self._attr_unique_id = object_id
+        self._attr_suggested_object_id = object_id
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, entry.entry_id)},
+            name="Hidroelectrica",
+            manufacturer="Hidroelectrica S.A.",
+            model="iHidro Portal",
+            entry_type="service",
+        )
+
+    @property
+    def native_value(self) -> float | None:
+        if not self.coordinator.data:
+            return None
+        return _parse_ron(self.coordinator.data.get("unpaid_invoices", {}).get("amount"))
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        if not self.coordinator.data:
+            return {"overdue": False}
+        unpaid = self.coordinator.data.get("unpaid_invoices", {})
+        due_date_raw = unpaid.get("dueDate")
+        days = _days_until(due_date_raw) if due_date_raw else None
+        overdue = unpaid.get("overdue") or (days is not None and days < 0)
+        return {
+            "due_date": due_date_raw,
+            "days_until_due": days,
+            "overdue": bool(overdue),
+        }
+
+
+# ------------------------------------------------------------------
+# Consumption history sensor (per-year)
+# ------------------------------------------------------------------
+
+
+class HidroelectricaConsumptionHistorySensor(
+    CoordinatorEntity[HidroelectricaCoordinator], SensorEntity
+):
+    """Yearly electricity consumption history in kWh, with per-month attributes."""
+
+    _attr_has_entity_name = True
+    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
+    _attr_state_class = SensorStateClass.TOTAL
+    _attr_suggested_display_precision = 1
+    _attr_icon = "mdi:lightning-bolt"
+
+    def __init__(
+        self,
+        coordinator: HidroelectricaCoordinator,
+        entry: ConfigEntry,
+        year: int,
+    ) -> None:
+        super().__init__(coordinator)
+        self._year = year
+        self._attr_translation_key = "consumption_history_year"
+        self._attr_translation_placeholders = {"year": str(year)}
+        object_id = f"{DOMAIN}_{_device_slug(coordinator.data)}_consumption_history_{year}"
+        self._attr_unique_id = object_id
+        self._attr_suggested_object_id = object_id
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, entry.entry_id)},
+            name="Hidroelectrica",
+            manufacturer="Hidroelectrica S.A.",
+            model="iHidro Portal",
+            entry_type="service",
+        )
+
+    def _get_year_entries(self) -> list[dict]:
+        """Return list of {month_name, kwh} for this year from index history."""
+        if not self.coordinator.data:
+            return []
+        index_history: dict = self.coordinator.data.get("index_history", {})
+        entries = []
+        for month_num in range(1, 13):
+            kwh = index_history.get((self._year, month_num))
+            if kwh is not None:
+                try:
+                    month_name = calendar.month_name[month_num]
+                except IndexError:
+                    month_name = str(month_num)
+                entries.append({"month_num": month_num, "month_name": month_name, "kwh": kwh})
+        return entries
+
+    @property
+    def native_value(self) -> float | None:
+        entries = self._get_year_entries()
+        if not entries:
+            return None
+        return round(sum(e["kwh"] for e in entries), 1)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        entries = self._get_year_entries()
+        attrs: dict = {}
+        total = 0.0
+        for e in entries:
+            attrs[e["month_name"]] = round(e["kwh"], 1)
+            total += e["kwh"]
+        count = len(entries)
+        days_in_year = 366 if calendar.isleap(self._year) else 365
+        attrs["total_kwh"] = round(total, 1)
+        attrs["average_monthly_kwh"] = round(total / count, 1) if count else 0.0
+        attrs["average_daily_kwh"] = round(total / days_in_year, 2)
+        return attrs
 
 
 # ------------------------------------------------------------------

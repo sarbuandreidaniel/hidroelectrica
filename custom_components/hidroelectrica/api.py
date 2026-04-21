@@ -78,6 +78,14 @@ class HidroelectricaAPI:
         pods = result.get("Data", [])
         return pods[0] if pods else None
 
+    async def get_index_history(self, installation: str, pod: str) -> list[dict]:
+        """Return full meter index reading history for the given installation + POD."""
+        result = await self._post(
+            f"{INDEX_HISTORY_URL}/LoadW2UIGridData",
+            {"installation": installation, "podvalue": pod},
+        )
+        return result if isinstance(result, list) else []
+
     async def get_meter_readings(self, installation: str, pod: str) -> list[dict]:
         """Return meter reading entities for the given installation + POD."""
         result = await self._post(
@@ -135,7 +143,7 @@ class HidroelectricaAPI:
     # ------------------------------------------------------------------
 
     async def get_usage(self) -> dict:
-        """Return monthly usage chart data."""
+        """Return monthly usage chart data (rolling ~12-month window)."""
         result = await self._post(
             f"{USAGES_URL}/LoadUsage",
             {

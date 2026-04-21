@@ -104,8 +104,17 @@ async def login(session: aiohttp.ClientSession, username: str, password: str) ->
         html = await resp.text()
 
     m = re.search(
-        rf'id="{re.escape(CSRF_FIELD_NAME)}"[^>]*value="([^"]+)"',
+        r'<input[^>]+name="' + re.escape(CSRF_FIELD_NAME) + r'"[^>]+value="([^"]*)"',
         html,
+        re.IGNORECASE,
+    ) or re.search(
+        r'<input[^>]+value="([^"]*)"[^>]+name="' + re.escape(CSRF_FIELD_NAME) + r'"',
+        html,
+        re.IGNORECASE,
+    ) or re.search(
+        r'<input[^>]+id="' + re.escape(CSRF_FIELD_NAME) + r'"[^>]+value="([^"]*)"',
+        html,
+        re.IGNORECASE,
     )
     if not m:
         print("❌ CSRF token not found in Dashboard page")
@@ -227,8 +236,16 @@ async def run_tests(session: aiohttp.ClientSession, username: str, password: str
             pods = data.get("Data", [])
             if pods:
                 first = pods[0]
-                installation = first.get("InstallationNumber") or first.get("Installation")
-                pod = first.get("POD") or first.get("Pod")
+                installation = (
+                    first.get("InstallationNumber")
+                    or first.get("Installation")
+                    or first.get("installation")
+                )
+                pod = (
+                    first.get("POD")
+                    or first.get("Pod")
+                    or first.get("pod")
+                )
                 print(f"   → installation={installation}, pod={pod}")
     except Exception as e:
         print(f"❌ {e}")
@@ -286,30 +303,83 @@ async def run_tests(session: aiohttp.ClientSession, username: str, password: str
     # ----------------------------------------------------------------
     # 4. Usage
     # ----------------------------------------------------------------
-    print("\n📡 Usages / LoadUsage")
+    for test_year in ["", "2025", "2026"]:
+        label = f"usageyear={test_year!r}" if test_year else "usageyear='' (default/rolling)"
+        print(f"\n📡 Usages / LoadUsage  [{label}]")
+        try:
+            data = await post(
+                session, csrf_token,
+                f"{USAGES_URL}/LoadUsage",
+                {
+                    "UsageOrGeneration": "1",
+                    "Type": "D",
+                    "Mode": "M",
+                    "strDate": "",
+                    "hourlyType": "H",
+                    "SeasonId": "",
+                    "weatherOverlay": 0,
+                    "usageyear": test_year,
+                    "MeterNumber": "",
+                    "DateFromDaily": "",
+                    "DateToDaily": "",
+                    "IsNonAmi": True,
+                },
+            )
+            print("✅ OK")
+            if isinstance(data, dict):
+                series = data.get("objUsageGenerationResultSetTwo", [])
+                months = [(e.get("Month"), e.get("Year"), e.get("value")) for e in series]
+                print(f"   Series ({len(series)} entries): {months}")
+            else:
+                _print("   ", data)
+        except Exception as e:
+            print(f"❌ {e}")
+
+    # ----------------------------------------------------------------
+    # 5. Index history — find correct payload for LoadW2UIGridData
+    # ----------------------------------------------------------------
+    print("\n─" * 50)
+    print("📡 IndexHistory — scraping page JS for endpoint clues")
     try:
-        data = await post(
-            session, csrf_token,
-            f"{USAGES_URL}/LoadUsage",
-            {
-                "UsageOrGeneration": "1",
-                "Type": "D",
-                "Mode": "M",
-                "strDate": "",
-                "hourlyType": "H",
-                "SeasonId": "",
-                "weatherOverlay": 0,
-                "usageyear": "",
-                "MeterNumber": "",
-                "DateFromDaily": "",
-                "DateToDaily": "",
-                "IsNonAmi": True,
-            },
+        async with session.get(f"{INDEX_HISTORY_URL}") as resp:
+            page_html = await resp.text()
+        # Find all WebMethod-style JS calls (PageMethods.xxx or $.ajax url patterns)
+        import re as _re
+        calls = _re_findall = _re.findall(
+            r'IndexHistory\.aspx/(\w+)|PageMethods\.(\w+)|\.ajax\([^)]*url[^)]*IndexHistory[^)]*\)',
+            page_html,
         )
-        print("✅ OK")
-        _print("   ", data)
+        method_names = [m for pair in calls for m in pair if m]
+        print(f"   Found JS method references: {sorted(set(method_names))}")
+        # Also look for payload field names
+        fields = _re.findall(r'"(installation|pod|podvalue|Installation|POD|Pod|contractAccountID|accountID)"', page_html)
+        print(f"   Found payload field names: {sorted(set(fields))}")
     except Exception as e:
         print(f"❌ {e}")
+
+    print("\n📡 IndexHistory / LoadW2UIGridData — probing payload variants")
+    pod_info = {"installation": installation or "", "pod": pod or ""}
+    payloads_to_try = [
+        {"installation": installation or "", "podvalue": pod or ""},
+        {"installation": installation or "", "pod": pod or ""},
+        {"Installation": installation or "", "POD": pod or ""},
+        {"installation": installation or "", "podvalue": pod or "", "fromDate": "", "toDate": ""},
+        {"installation": installation or "", "pod": pod or "", "fromDate": "", "toDate": ""},
+        {"contractAccountID": "8000863947", "installation": installation or "", "pod": pod or ""},
+    ]
+    for payload in payloads_to_try:
+        try:
+            data = await post(session, csrf_token, f"{INDEX_HISTORY_URL}/LoadW2UIGridData", payload)
+            count = len(data) if isinstance(data, list) else ("dict" if isinstance(data, dict) else type(data).__name__)
+            print(f"   payload={list(payload.keys())} → {count} items")
+            if isinstance(data, list) and data:
+                _print("   First: ", data[0])
+                break
+            elif isinstance(data, dict) and data:
+                _print("   ", data)
+                break
+        except Exception as e:
+            print(f"   payload={list(payload.keys())} → ❌ {e}")
 
     print("\n✅ All tests complete.")
 
