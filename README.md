@@ -238,7 +238,3 @@ Licențiat sub [MIT License](LICENSE).
 ---
 
 > **Disclaimer:** Aceasta este o integrare neoficială, dezvoltată de comunitate. Nu este afiliată cu și nu este aprobată de Hidroelectrica S.A. Folosești pe propria răspundere și respectând termenii și condițiile Hidroelectrica.
-
----
-
-**Autor:** [Andrei Sarbu](https://github.com/sarbuandreidaniel) · **Versiune:** 0.3.0 · **Actualizat:** Aprilie 2026
