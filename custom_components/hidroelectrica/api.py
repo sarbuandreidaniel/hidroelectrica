@@ -94,6 +94,29 @@ class HidroelectricaAPI:
         )
         return result if isinstance(result, list) else []
 
+    async def submit_meter_reading(
+        self,
+        meter_entities: list[dict],
+        installation: str,
+        pod: str,
+    ) -> dict:
+        """Submit meter readings for all registers to the iHidro portal.
+
+        ``meter_entities`` is the same structure as ``UsageSelfMeterReadEntity``
+        used by the page JS, with ``newmeterread`` set to the user's value.
+        """
+        payload = {
+            "objSubmitMeterReadProxy": {
+                "UsageSelfMeterReadEntity": meter_entities,
+            },
+            "installation_number": installation,
+            "pod_value": pod,
+        }
+        result = await self._post(
+            f"{SELF_METER_URL}/SubmitSelfMeterReading", payload
+        )
+        return result if isinstance(result, dict) else {"result": result}
+
     async def get_estimated_meter_value(
         self,
         meter_entity: dict,

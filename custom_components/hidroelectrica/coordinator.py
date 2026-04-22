@@ -36,6 +36,11 @@ class HidroelectricaCoordinator(DataUpdateCoordinator):
         # POD info is stable — fetch once per session
         self._pod_info: dict | None = None
 
+    @property
+    def api(self) -> "HidroelectricaAPI | None":
+        """Expose the underlying API client (used by button entities)."""
+        return self._api
+
     # ------------------------------------------------------------------
     # DataUpdateCoordinator interface
     # ------------------------------------------------------------------
@@ -121,18 +126,31 @@ class HidroelectricaCoordinator(DataUpdateCoordinator):
             try:
                 readings = await self._api.get_meter_readings(installation, pod)
                 data["meter"] = _parse_meter_readings(readings)
-                consumed_entity = next(
-                    (r for r in readings if r.get("Registers") == "1.8.0"),
-                    None,
-                )
-                if consumed_entity:
-                    estimated = await self._api.get_estimated_meter_value(
-                        consumed_entity, installation
-                    )
-                    data["meter"]["estimated_value"] = estimated
+                data["meter_readings"] = readings  # raw list for number/button entities
+
+                # Fetch the portal's estimated current value for each register
+                # (mirrors what the web UI shows in the "Introduceți indexul" inputs)
+                estimates: dict[str, int | None] = {}
+                for reading in readings:
+                    try:
+                        est = await self._api.get_estimated_meter_value(
+                            reading, installation
+                        )
+                        estimates[reading.get("Registers", "")] = est
+                    except Exception as est_err:  # noqa: BLE001
+                        _LOGGER.debug(
+                            "Could not fetch estimate for register %s: %s",
+                            reading.get("Registers"),
+                            est_err,
+                        )
+                data["meter_estimates"] = estimates
+                # Keep backward-compat key for the existing sensor
+                data["meter"]["estimated_value"] = estimates.get("1.8.0")
             except Exception as err:  # noqa: BLE001
                 _LOGGER.warning("Could not fetch meter data: %s", err)
                 data["meter"] = {}
+                data["meter_readings"] = []
+                data["meter_estimates"] = {}
 
             # Index history — full meter readings for consumption history sensors
             try:
@@ -143,6 +161,8 @@ class HidroelectricaCoordinator(DataUpdateCoordinator):
                 data["index_history"] = {}
         else:
             data["meter"] = {}
+            data["meter_readings"] = []
+            data["meter_estimates"] = {}
             data["index_history"] = {}
 
         # Usage — rolling 12-month window (usageyear parameter is ignored by the API)

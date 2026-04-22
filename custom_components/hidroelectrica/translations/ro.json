@@ -23,14 +23,30 @@
     }
   },
   "entity": {
+    "number": {
+      "meter_index_consumed_input": {
+        "name": "1.8.0"
+      },
+      "meter_index_produced_input": {
+        "name": "2.8.0"
+      }
+    },
+    "button": {
+      "submit_meter_reading": {
+        "name": "Trimite citire contor"
+      }
+    },
     "sensor": {
       "balance": {"name": "Sold curent"},
     "unpaid_invoice": {
         "name": "Factură neachitată"
     },
-      "meter_consumed": {"name": "Index energie activă consumată"},
-      "meter_produced": {"name": "Index energie activă produsă"},
-      "meter_estimated": {"name": "Index estimat curent"},
+      "meter_consumed": {
+        "name": "1.8.0"
+      },
+      "meter_produced": {
+        "name": "2.8.0"
+      },
       "last_reading_date": {"name": "Data ultimei citiri"},
       "meter_serial": {"name": "Serie contor"},
       "pod": {"name": "POD"},

@@ -23,14 +23,30 @@
     }
   },
   "entity": {
+    "number": {
+      "meter_index_consumed_input": {
+        "name": "1.8.0"
+      },
+      "meter_index_produced_input": {
+        "name": "2.8.0"
+      }
+    },
+    "button": {
+      "submit_meter_reading": {
+        "name": "Submit Meter Reading"
+      }
+    },
     "sensor": {
       "balance": {"name": "Current Balance"},
       "unpaid_invoice": {
         "name": "Unpaid Invoice"
       },
-      "meter_consumed": {"name": "Active Energy Consumed Index"},
-      "meter_produced": {"name": "Active Energy Produced Index"},
-      "meter_estimated": {"name": "Current Estimated Index"},
+      "meter_consumed": {
+        "name": "1.8.0"
+      },
+      "meter_produced": {
+        "name": "2.8.0"
+      },
       "last_reading_date": {"name": "Last Reading Date"},
       "meter_serial": {"name": "Meter Serial Number"},
       "pod": {"name": "POD"},

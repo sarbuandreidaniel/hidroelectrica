@@ -153,14 +153,6 @@ SENSOR_DESCRIPTIONS: tuple[HidroelectricaSensorEntityDescription, ...] = (
         value_fn=lambda d: d.get("meter", {}).get("produced_index"),
     ),
     HidroelectricaSensorEntityDescription(
-        key="meter_estimated",
-        translation_key="meter_estimated",
-        icon="mdi:gauge",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda d: d.get("meter", {}).get("estimated_value"),
-    ),
-    HidroelectricaSensorEntityDescription(
         key="last_reading_date",
         translation_key="last_reading_date",
         icon="mdi:calendar-today",
