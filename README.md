@@ -7,7 +7,7 @@
 [![Susține](https://img.shields.io/badge/Sus%C8%9Bine-Buy%20Me%20a%20Coffee-yellow?style=flat-square&logo=buy-me-a-coffee)](https://www.buymeacoffee.com/sarbuandreidaniel)
 [![Revolut](https://img.shields.io/badge/Sus%C8%9Bine--m%C4%83%20prin-Revolut-blue?style=flat-square&logo=revolut)](https://revolut.me/andreisarbu/pocket/BPJpX9dppQ)
 
-O integrare profesională pentru Home Assistant care conectează contul tău **Hidroelectrica România** direct la platforma de smart home. Monitorizează consumul de energie electrică, soldul contului, facturile, indexul contorului și mult mai mult — totul dintr-un singur loc.
+O integrare pentru Home Assistant care conectează contul tău **Hidroelectrica România** direct la platforma de smart home. Monitorizează consumul de energie electrică, soldul contului, facturile, indexul contorului și mult mai mult — totul dintr-un singur loc.
 
 ---
 
