@@ -15,17 +15,17 @@ O integrare profesională pentru Home Assistant care conectează contul tău **H
 
 ### Funcționalități disponibile
 - **Autentificare securizată** — Login prin portalul iHidro, același mecanism ca aplicația oficială
+- **Mai multe contracte** — Suport complet pentru conturi cu mai multe locuri de consum; fiecare contract apare ca un dispozitiv separat în HA
 - **Sold cont** — Soldul în timp real, exprimat în RON
 - **Index contor** — Index energie consumată, produsă (fotovoltaic) și estimat curent
+- **Transmitere index** — Buton dedicat per contract pentru trimiterea indexului citit; valorile se introduc prin entitățile `number` și se trimit cu un singur apăsat
 - **Facturi** — Scadențe, sume, numere de factură și stare restanțe
 - **Consum** — Consum și cost pentru luna anterioară, medie lunară și vârf anual
 - **Istoric facturare** — Istoricul complet pentru anul curent și cel precedent, separat pe energie consumată și produsă
 - **Date contor** — Serie contor, cod POD, data ultimei citiri
 
 ### În curând
-- 📋 Transmitere automată a indexului
 - 📋 Grafice și statistici de consum
-- 📋 Suport pentru mai multe locuri de consum
 - 📋 Alerte de plată prin notificări HA
 
 ---
@@ -86,16 +86,16 @@ Integrarea se va autentifica, va prelua datele contorului tău și va crea autom
 
 ### Atribute senzori
 
-**`sensor.hidroelectrica_<pod>_unpaid_invoice`** include:
+**`sensor.hidroelectrica_<uan>_unpaid_invoice`** include:
 - `due_date` — Data scadenței facturii neachitate
 - `days_until_due` — Zile rămase până la scadență
 - `overdue` — `true` dacă scadența a trecut
 
-**`sensor.hidroelectrica_<pod>_consumption_history_AAAA`** include:
+**`sensor.hidroelectrica_<uan>_consumption_history_AAAA`** include:
 - Consum lunar (kWh) pentru fiecare lună disponibilă
 - `total_kwh`, `average_monthly_kwh`, `average_daily_kwh`
 
-**`sensor.hidroelectrica_<pod>_invoice_history_consumed_AAAA`** și **`sensor.hidroelectrica_<pod>_invoice_history_produced_AAAA`** includ:
+**`sensor.hidroelectrica_<uan>_invoice_history_consumed_AAAA`** și **`sensor.hidroelectrica_<uan>_invoice_history_produced_AAAA`** includ:
 - `Invoice 1 DD/MM/YYYY` … `Invoice N DD/MM/YYYY` — suma fiecărei facturi în RON
 - `total_invoices` — numărul total de facturi din an
 - `total_amount_paid` — suma totală plătită în an (RON)
@@ -113,12 +113,46 @@ automation:
   - alias: "Factură Hidroelectrica restantă"
     trigger:
       - platform: template
-        value_template: "{{ state_attr('sensor.hidroelectrica_<pod>_unpaid_invoice', 'overdue') == true }}"
+        value_template: "{{ state_attr('sensor.hidroelectrica_8000123456_unpaid_invoice', 'overdue') == true }}"
     action:
       - service: notify.mobile_app
         data:
           title: "Factură Hidroelectrica"
-          message: "Ai o factură restantă de {{ states('sensor.hidroelectrica_<pod>_unpaid_invoice') }} RON"
+          message: "Ai o factură restantă de {{ states('sensor.hidroelectrica_8000123456_unpaid_invoice') }} RON"
+```
+
+Exemplu — trimitere automată a indexului în prima zi a lunii:
+
+```yaml
+automation:
+  - alias: "Trimite index Hidroelectrica"
+    trigger:
+      - platform: time
+        at: "08:00:00"
+    condition:
+      - condition: template
+        value_template: "{{ now().day == 1 }}"
+    action:
+      - service: button.press
+        target:
+          entity_id: button.hidroelectrica_8000123456_submit_meter
+```
+
+Exemplu — trimitere automată a indexului în prima zi a lunii:
+
+```yaml
+automation:
+  - alias: "Trimite index Hidroelectrica"
+    trigger:
+      - platform: time
+        at: "08:00:00"
+    condition:
+      - condition: template
+        value_template: "{{ now().day == 1 }}"
+    action:
+      - service: button.press
+        target:
+          entity_id: button.hidroelectrica_8000123456_submit_meter
 ```
 
 ---
@@ -207,4 +241,4 @@ Licențiat sub [MIT License](LICENSE).
 
 ---
 
-**Autor:** [Andrei Sarbu](https://github.com/sarbuandreidaniel) · **Actualizat:** Aprilie 2026
+**Autor:** [Andrei Sarbu](https://github.com/sarbuandreidaniel) · **Versiune:** 0.3.0 · **Actualizat:** Aprilie 2026
