@@ -49,7 +49,22 @@ class HidroelectricaCoordinator(DataUpdateCoordinator):
         """Fetch all data from the iHidro portal."""
         try:
             await self._ensure_authenticated()
-            return await self._fetch_all()
+            data = await self._fetch_all()
+
+            # Detect silent server-side session expiry: when the ASP.NET session
+            # cookie expires the portal returns {"d": null} for every AJAX call
+            # (HTTP 200, valid JSON, no exception).  The symptom is all contracts
+            # returning empty billing dicts.  When detected, close the stale
+            # session and re-authenticate before returning.
+            if self._session_likely_expired(data):
+                _LOGGER.debug(
+                    "Hidroelectrica: silent session expiry detected — re-authenticating"
+                )
+                await self.async_close()
+                await self._ensure_authenticated()
+                data = await self._fetch_all()
+
+            return data
         except ConfigEntryAuthFailed:
             raise
         except aiohttp.ClientResponseError as err:
@@ -64,6 +79,23 @@ class HidroelectricaCoordinator(DataUpdateCoordinator):
         except Exception as err:  # noqa: BLE001
             _LOGGER.warning("Unexpected Hidroelectrica update error: %s", err)
             raise UpdateFailed(f"Unexpected error: {err}") from err
+
+    def _session_likely_expired(self, data: dict) -> bool:
+        """Return True when all contracts have empty billing data.
+
+        When the server-side ASP.NET session expires the portal returns
+        ``{"d": null}`` for every AJAX endpoint (HTTP 200, no exception).
+        Billing data is always present for a healthy session, so an empty
+        billing dict across all contracts is a reliable expiry signal.
+        """
+        contracts = data.get("contracts", [])
+        if not contracts:
+            return False
+        for contract in contracts:
+            uan = contract["utility_account_number"]
+            if data.get(uan, {}).get("billing"):
+                return False  # at least one contract has real data
+        return True  # every contract returned empty billing
 
     async def async_close(self) -> None:
         """Close the underlying aiohttp session."""
