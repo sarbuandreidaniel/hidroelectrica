@@ -32,28 +32,40 @@ async def async_setup_entry(
         "coordinator"
     ]
 
-    def build_entities(readings: list[dict]) -> list[NumberEntity]:
+    def build_entities_for_contract(
+        contract: dict, readings: list[dict]
+    ) -> list[NumberEntity]:
         return [
-            HidroelectricaEnergyIndexNumber(coordinator, config_entry, reading)
+            HidroelectricaEnergyIndexNumber(coordinator, config_entry, reading, contract)
             for reading in readings
             if reading.get("Registers") in _REGISTER_KEYS
         ]
 
-    known_registers: set[str] = set()
+    # Track (uan, register) pairs to avoid duplicates
+    known_registers: set[tuple[str, str]] = set()
+    entities: list[NumberEntity] = []
 
-    readings = (coordinator.data or {}).get("meter_readings", [])
-    entities = build_entities(readings)
-    known_registers.update(r.get("Registers", "") for r in readings)
+    for contract in (coordinator.data or {}).get("contracts", []):
+        uan = contract["utility_account_number"]
+        readings = (coordinator.data or {}).get(uan, {}).get("meter_readings", [])
+        entities += build_entities_for_contract(contract, readings)
+        known_registers.update((uan, r.get("Registers", "")) for r in readings)
+
     async_add_entities(entities)
 
     @callback
     def async_add_new_entities() -> None:
-        current = (coordinator.data or {}).get("meter_readings", [])
-        new = [r for r in current if r.get("Registers") not in known_registers]
-        if not new:
-            return
-        async_add_entities(build_entities(new))
-        known_registers.update(r.get("Registers", "") for r in new)
+        for contract in (coordinator.data or {}).get("contracts", []):
+            uan = contract["utility_account_number"]
+            current = (coordinator.data or {}).get(uan, {}).get("meter_readings", [])
+            new = [
+                r for r in current
+                if (uan, r.get("Registers", "")) not in known_registers
+            ]
+            if not new:
+                continue
+            async_add_entities(build_entities_for_contract(contract, new))
+            known_registers.update((uan, r.get("Registers", "")) for r in new)
 
     config_entry.async_on_unload(
         coordinator.async_add_listener(async_add_new_entities)
@@ -74,24 +86,27 @@ class HidroelectricaEnergyIndexNumber(CoordinatorEntity, NumberEntity):
         coordinator: HidroelectricaCoordinator,
         config_entry: ConfigEntry,
         meter_reading: dict,
+        contract: dict,
     ) -> None:
         super().__init__(coordinator)
         self.config_entry = config_entry
         self._register = meter_reading.get("Registers", "")
         self._pod = meter_reading.get("POD", "")
+        self._uan = contract["utility_account_number"]
+        self._contract = contract
 
         suffix = _REGISTER_KEYS.get(self._register, slugify(self._register))
         self._attr_translation_key = f"meter_index_{suffix}_input"
 
-        pod_slug = slugify(self._pod) or "meter"
-        object_id = f"{DOMAIN}_{pod_slug}_meter_index_{suffix}_input"
+        uan_slug = slugify(self._uan) or "meter"
+        object_id = f"{DOMAIN}_{uan_slug}_meter_index_{suffix}_input"
         self._attr_unique_id = object_id
         self._attr_suggested_object_id = object_id
 
     @property
     def _current_reading(self) -> dict:
         """Return the current raw meter reading for this register."""
-        for r in (self.coordinator.data or {}).get("meter_readings", []):
+        for r in (self.coordinator.data or {}).get(self._uan, {}).get("meter_readings", []):
             if r.get("Registers") == self._register:
                 return r
         return {}
@@ -99,8 +114,8 @@ class HidroelectricaEnergyIndexNumber(CoordinatorEntity, NumberEntity):
     @property
     def device_info(self) -> DeviceInfo:
         return DeviceInfo(
-            identifiers={(DOMAIN, self.config_entry.entry_id)},
-            name="Hidroelectrica",
+            identifiers={(DOMAIN, self._uan)},
+            name=f"{self._contract['name']}",  # already includes UAN e.g. "Casuta Noastra (8000863947)"
             manufacturer="Hidroelectrica S.A.",
             model="iHidro Portal",
             entry_type="service",
@@ -126,12 +141,14 @@ class HidroelectricaEnergyIndexNumber(CoordinatorEntity, NumberEntity):
             self.hass.data.get(DOMAIN, {})
             .get(self.config_entry.entry_id, {})
             .get("pending_meter_index", {})
+            .get(self._uan, {})
         )
         if self._register in pending:
             return float(pending[self._register])
         # Use the portal's estimate, fall back to last confirmed index
         estimate = (
             (self.coordinator.data or {})
+            .get(self._uan, {})
             .get("meter_estimates", {})
             .get(self._register)
         )
@@ -168,8 +185,8 @@ class HidroelectricaEnergyIndexNumber(CoordinatorEntity, NumberEntity):
 
     async def async_set_native_value(self, value: float) -> None:
         """Stage the index value. Press Submit to send it to the portal."""
-        pending = self.hass.data[DOMAIN][self.config_entry.entry_id][
+        pending_all = self.hass.data[DOMAIN][self.config_entry.entry_id][
             "pending_meter_index"
         ]
-        pending[self._register] = int(value)
+        pending_all.setdefault(self._uan, {})[self._register] = int(value)
         self.async_write_ha_state()

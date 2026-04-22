@@ -101,13 +101,7 @@ def _fmt_date(value: Any) -> str | None:
     return str(value)
 
 
-def _device_slug(data: dict | None) -> str:
-    """Return a stable device slug for entity and unique IDs."""
-    meter = data.get("meter", {}) if isinstance(data, dict) else {}
-    pod = meter.get("pod") if isinstance(meter, dict) else None
-    serial_number = meter.get("serial_number") if isinstance(meter, dict) else None
-    slug = slugify(str(pod or serial_number or "account"))
-    return slug or "account"
+
 
 
 # ------------------------------------------------------------------
@@ -199,27 +193,43 @@ async def async_setup_entry(
         "coordinator"
     ]
     current_year = date.today().year
-    entities: list = [
-        HidroelectricaSensor(coordinator, entry, description)
-        for description in SENSOR_DESCRIPTIONS
-    ]
-    # Latest unpaid invoice (single sensor with attributes)
-    entities.append(HidroelectricaUnpaidInvoiceSensor(coordinator, entry))
-    # Consumption history (kWh per year)
-    entities += [
-        HidroelectricaConsumptionHistorySensor(coordinator, entry, current_year),
-        HidroelectricaConsumptionHistorySensor(coordinator, entry, current_year - 1),
-    ]
-    # Consumed energy billing history (excludes produced-energy reports)
-    entities += [
-        HidroelectricaInvoiceHistorySensor(coordinator, entry, current_year, produced=False),
-        HidroelectricaInvoiceHistorySensor(coordinator, entry, current_year - 1, produced=False),
-    ]
-    # Produced energy billing history (fotovoltaic)
-    entities += [
-        HidroelectricaInvoiceHistorySensor(coordinator, entry, current_year, produced=True),
-        HidroelectricaInvoiceHistorySensor(coordinator, entry, current_year - 1, produced=True),
-    ]
+    entities: list = []
+
+    for contract in (coordinator.data or {}).get("contracts", []):
+        uan = contract["utility_account_number"]
+        device_name = contract["name"]  # already includes UAN e.g. "Casuta Noastra (8000863947)"
+        for description in SENSOR_DESCRIPTIONS:
+            entities.append(
+                HidroelectricaSensor(coordinator, entry, description, uan, device_name)
+            )
+        entities.append(
+            HidroelectricaUnpaidInvoiceSensor(coordinator, entry, uan, device_name)
+        )
+        entities += [
+            HidroelectricaConsumptionHistorySensor(
+                coordinator, entry, current_year, uan, device_name
+            ),
+            HidroelectricaConsumptionHistorySensor(
+                coordinator, entry, current_year - 1, uan, device_name
+            ),
+        ]
+        entities += [
+            HidroelectricaInvoiceHistorySensor(
+                coordinator, entry, current_year, uan, device_name, produced=False
+            ),
+            HidroelectricaInvoiceHistorySensor(
+                coordinator, entry, current_year - 1, uan, device_name, produced=False
+            ),
+        ]
+        entities += [
+            HidroelectricaInvoiceHistorySensor(
+                coordinator, entry, current_year, uan, device_name, produced=True
+            ),
+            HidroelectricaInvoiceHistorySensor(
+                coordinator, entry, current_year - 1, uan, device_name, produced=True
+            ),
+        ]
+
     async_add_entities(entities)
 
 
@@ -241,15 +251,19 @@ class HidroelectricaSensor(
         coordinator: HidroelectricaCoordinator,
         entry: ConfigEntry,
         description: HidroelectricaSensorEntityDescription,
+        uan: str,
+        device_name: str,
     ) -> None:
         super().__init__(coordinator)
         self.entity_description = description
-        object_id = f"{DOMAIN}_{_device_slug(coordinator.data)}_{description.key}"
+        self._uan = uan
+        uan_slug = slugify(uan)
+        object_id = f"{DOMAIN}_{uan_slug}_{description.key}"
         self._attr_unique_id = object_id
         self._attr_suggested_object_id = object_id
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry.entry_id)},
-            name="Hidroelectrica",
+            identifiers={(DOMAIN, uan)},
+            name=device_name,
             manufacturer="Hidroelectrica S.A.",
             model="iHidro Portal",
             entry_type="service",
@@ -260,7 +274,9 @@ class HidroelectricaSensor(
         """Return the sensor's current value."""
         if self.coordinator.data is None:
             return None
-        return self.entity_description.value_fn(self.coordinator.data)
+        return self.entity_description.value_fn(
+            self.coordinator.data.get(self._uan, {})
+        )
 
 
 # ------------------------------------------------------------------
@@ -285,14 +301,18 @@ class HidroelectricaUnpaidInvoiceSensor(
         self,
         coordinator: HidroelectricaCoordinator,
         entry: ConfigEntry,
+        uan: str,
+        device_name: str,
     ) -> None:
         super().__init__(coordinator)
-        object_id = f"{DOMAIN}_{_device_slug(coordinator.data)}_unpaid_invoice"
+        self._uan = uan
+        uan_slug = slugify(uan)
+        object_id = f"{DOMAIN}_{uan_slug}_unpaid_invoice"
         self._attr_unique_id = object_id
         self._attr_suggested_object_id = object_id
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry.entry_id)},
-            name="Hidroelectrica",
+            identifiers={(DOMAIN, uan)},
+            name=device_name,
             manufacturer="Hidroelectrica S.A.",
             model="iHidro Portal",
             entry_type="service",
@@ -302,13 +322,17 @@ class HidroelectricaUnpaidInvoiceSensor(
     def native_value(self) -> float | None:
         if not self.coordinator.data:
             return None
-        return _parse_ron(self.coordinator.data.get("unpaid_invoices", {}).get("amount"))
+        return _parse_ron(
+            self.coordinator.data.get(self._uan, {})
+            .get("unpaid_invoices", {})
+            .get("amount")
+        )
 
     @property
     def extra_state_attributes(self) -> dict:
         if not self.coordinator.data:
             return {"overdue": False}
-        unpaid = self.coordinator.data.get("unpaid_invoices", {})
+        unpaid = self.coordinator.data.get(self._uan, {}).get("unpaid_invoices", {})
         due_date_raw = unpaid.get("dueDate")
         days = _days_until(due_date_raw) if due_date_raw else None
         overdue = unpaid.get("overdue") or (days is not None and days < 0)
@@ -341,17 +365,21 @@ class HidroelectricaConsumptionHistorySensor(
         coordinator: HidroelectricaCoordinator,
         entry: ConfigEntry,
         year: int,
+        uan: str,
+        device_name: str,
     ) -> None:
         super().__init__(coordinator)
         self._year = year
+        self._uan = uan
         self._attr_translation_key = "consumption_history_year"
         self._attr_translation_placeholders = {"year": str(year)}
-        object_id = f"{DOMAIN}_{_device_slug(coordinator.data)}_consumption_history_{year}"
+        uan_slug = slugify(uan)
+        object_id = f"{DOMAIN}_{uan_slug}_consumption_history_{year}"
         self._attr_unique_id = object_id
         self._attr_suggested_object_id = object_id
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry.entry_id)},
-            name="Hidroelectrica",
+            identifiers={(DOMAIN, uan)},
+            name=device_name,
             manufacturer="Hidroelectrica S.A.",
             model="iHidro Portal",
             entry_type="service",
@@ -361,7 +389,9 @@ class HidroelectricaConsumptionHistorySensor(
         """Return list of {month_name, kwh} for this year from index history."""
         if not self.coordinator.data:
             return []
-        index_history: dict = self.coordinator.data.get("index_history", {})
+        index_history: dict = (
+            self.coordinator.data.get(self._uan, {}).get("index_history", {})
+        )
         entries = []
         for month_num in range(1, 13):
             kwh = index_history.get((self._year, month_num))
@@ -417,14 +447,18 @@ class HidroelectricaInvoiceHistorySensor(
         coordinator: HidroelectricaCoordinator,
         entry: ConfigEntry,
         year: int,
+        uan: str,
+        device_name: str,
         produced: bool = False,
     ) -> None:
         super().__init__(coordinator)
         self._year = year
         self._produced = produced
+        self._uan = uan
         suffix = "produced" if produced else "consumed"
+        uan_slug = slugify(uan)
         object_id = (
-            f"{DOMAIN}_{_device_slug(coordinator.data)}_invoice_history_{suffix}_{year}"
+            f"{DOMAIN}_{uan_slug}_invoice_history_{suffix}_{year}"
         )
         self._attr_unique_id = object_id
         self._attr_suggested_object_id = object_id
@@ -434,8 +468,8 @@ class HidroelectricaInvoiceHistorySensor(
         self._attr_translation_placeholders = {"year": str(year)}
         self._attr_icon = "mdi:solar-power" if produced else "mdi:file-document-multiple"
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry.entry_id)},
-            name="Hidroelectrica",
+            identifiers={(DOMAIN, uan)},
+            name=device_name,
             manufacturer="Hidroelectrica S.A.",
             model="iHidro Portal",
             entry_type="service",
@@ -445,7 +479,7 @@ class HidroelectricaInvoiceHistorySensor(
         """Return invoices for this sensor's year, sorted chronologically."""
         if not self.coordinator.data:
             return []
-        history = self.coordinator.data.get("invoice_history", [])
+        history = self.coordinator.data.get(self._uan, {}).get("invoice_history", [])
         filtered = [
             inv for inv in history
             if str(inv.get("Date", ""))[-4:] == str(self._year)

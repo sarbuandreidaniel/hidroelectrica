@@ -23,6 +23,7 @@ from .auth import HidroelectricaAuth
 from .const import (
     BILL_DASHBOARD_URL,
     BILLING_HISTORY_URL,
+    COMMON_URL,
     INDEX_HISTORY_URL,
     SELF_METER_URL,
     USAGES_URL,
@@ -185,6 +186,24 @@ class HidroelectricaAPI:
             },
         )
         return result if isinstance(result, dict) else {}
+
+    # ------------------------------------------------------------------
+    # Contract switching
+    # ------------------------------------------------------------------
+
+    async def switch_contract(self, address_id: str) -> None:
+        """Switch the server-side session context to a different contract.
+
+        The portal uses ``Common.aspx/HandleAddressDropDownChange`` (the same
+        AJAX call the web page makes when the user selects a different entry in
+        the "Selectați Cont Contract" dropdown) to update the active account in
+        the server session.  All subsequent requests will return data for the
+        newly selected contract until this is called again.
+        """
+        await self._post(
+            f"{COMMON_URL}/HandleAddressDropDownChange",
+            {"ddlAddressSelectedValue": address_id},
+        )
 
     # ------------------------------------------------------------------
     # Internal

@@ -17,6 +17,7 @@ BILLING_HISTORY_URL = f"{PORTAL_BASE}/BillingHistory.aspx"
 INDEX_HISTORY_URL = f"{PORTAL_BASE}/IndexHistory.aspx"
 SELF_METER_URL = f"{PORTAL_BASE}/SelfMeterReading.aspx"
 USAGES_URL = f"{PORTAL_BASE}/Usages.aspx"
+COMMON_URL = f"{PORTAL_BASE}/Common.aspx"
 
 # ASP.NET hidden field that carries the CSRF token
 CSRF_FIELD_NAME = "ctl00$hdnCSRFToken"

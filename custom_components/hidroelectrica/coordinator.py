@@ -33,8 +33,8 @@ class HidroelectricaCoordinator(DataUpdateCoordinator):
         self._session: aiohttp.ClientSession | None = None
         self._auth: HidroelectricaAuth | None = None
         self._api: HidroelectricaAPI | None = None
-        # POD info is stable — fetch once per session
-        self._pod_info: dict | None = None
+        # POD info is stable — cache per contract (keyed by utility_account_number)
+        self._pod_info_cache: dict[str, dict | None] = {}
 
     @property
     def api(self) -> "HidroelectricaAPI | None":
@@ -72,6 +72,7 @@ class HidroelectricaCoordinator(DataUpdateCoordinator):
         self._session = None
         self._auth = None
         self._api = None
+        self._pod_info_cache = {}
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -85,7 +86,7 @@ class HidroelectricaCoordinator(DataUpdateCoordinator):
                 self._session, self._username, self._password
             )
             self._api = HidroelectricaAPI(self._session, self._auth)
-            self._pod_info = None  # reset cache for new session
+            self._pod_info_cache = {}  # reset cache for new session
 
         if not self._auth.csrf_token:
             ok = await self._auth.async_login()
@@ -95,41 +96,80 @@ class HidroelectricaCoordinator(DataUpdateCoordinator):
                 )
 
     async def _fetch_all(self) -> dict:
-        """Collect data from every relevant API endpoint."""
+        """Collect data from every relevant API endpoint for all contracts."""
         assert self._api is not None  # guaranteed by _ensure_authenticated
+        assert self._auth is not None
 
-        # POD / installation info — stable, fetch once
-        if self._pod_info is None:
-            self._pod_info = await self._api.get_pod_info()
+        contracts = self._auth.contracts
+        if not contracts:
+            _LOGGER.warning("Hidroelectrica: no contracts found after login")
+            return {"contracts": []}
 
+        result: dict = {"contracts": contracts}
+
+        for contract in contracts:
+            uan = contract["utility_account_number"]
+            address_id = contract["address_id"]
+
+            # Switch the server-side session to this contract
+            try:
+                await self._api.switch_contract(address_id)
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.warning(
+                    "Could not switch to contract %s (%s): %s", uan, contract["name"], err
+                )
+                result[uan] = {}
+                continue
+
+            result[uan] = await self._fetch_contract_data(uan)
+
+        return result
+
+    async def _fetch_contract_data(self, uan: str) -> dict:
+        """Fetch all data for the currently active contract."""
+        assert self._api is not None
+
+        # POD / installation info — stable, cache per contract
+        if uan not in self._pod_info_cache:
+            self._pod_info_cache[uan] = await self._api.get_pod_info()
+
+        pod_info = self._pod_info_cache[uan]
         data: dict = {}
 
         # Billing
         try:
             data["billing"] = await self._api.get_billing()
         except Exception as err:  # noqa: BLE001
-            _LOGGER.warning("Could not fetch billing data: %s", err)
+            _LOGGER.warning("[%s] Could not fetch billing data: %s", uan, err)
             data["billing"] = {}
 
         # Unpaid invoices
+        # NOTE: the portal's BindUnpaidInvoicesdetailsinGrid endpoint does not
+        # respect the active contract switch — it returns the default contract's
+        # invoices regardless.  Each invoice includes a ``contractAccountID``
+        # field matching its UAN, so we filter client-side to avoid showing the
+        # wrong contract's debt on every device.
         try:
             invoices = await self._api.get_unpaid_invoices()
-            data["unpaid_invoices"] = invoices[0] if invoices else {}
+            matching = [
+                inv for inv in invoices
+                if str(inv.get("contractAccountID", "")) == str(uan)
+            ]
+            data["unpaid_invoices"] = matching[0] if matching else {}
         except Exception as err:  # noqa: BLE001
-            _LOGGER.warning("Could not fetch unpaid invoices: %s", err)
+            _LOGGER.warning("[%s] Could not fetch unpaid invoices: %s", uan, err)
             data["unpaid_invoices"] = {}
 
         # Meter readings + estimated current value
-        if self._pod_info:
-            installation = self._pod_info.get("installation", "")
-            pod = self._pod_info.get("pod", "")
+        if pod_info:
+            installation = pod_info.get("installation", "")
+            pod = pod_info.get("pod", "")
             try:
                 readings = await self._api.get_meter_readings(installation, pod)
                 data["meter"] = _parse_meter_readings(readings)
                 data["meter_readings"] = readings  # raw list for number/button entities
 
                 # Fetch the portal's estimated current value for each register
-                # (mirrors what the web UI shows in the "Introduceți indexul" inputs)
                 estimates: dict[str, int | None] = {}
                 for reading in readings:
                     try:
@@ -139,25 +179,25 @@ class HidroelectricaCoordinator(DataUpdateCoordinator):
                         estimates[reading.get("Registers", "")] = est
                     except Exception as est_err:  # noqa: BLE001
                         _LOGGER.debug(
-                            "Could not fetch estimate for register %s: %s",
+                            "[%s] Could not fetch estimate for register %s: %s",
+                            uan,
                             reading.get("Registers"),
                             est_err,
                         )
                 data["meter_estimates"] = estimates
-                # Keep backward-compat key for the existing sensor
                 data["meter"]["estimated_value"] = estimates.get("1.8.0")
             except Exception as err:  # noqa: BLE001
-                _LOGGER.warning("Could not fetch meter data: %s", err)
+                _LOGGER.warning("[%s] Could not fetch meter data: %s", uan, err)
                 data["meter"] = {}
                 data["meter_readings"] = []
                 data["meter_estimates"] = {}
 
-            # Index history — full meter readings for consumption history sensors
+            # Index history
             try:
                 index_readings = await self._api.get_index_history(installation, pod)
                 data["index_history"] = _parse_index_history(index_readings)
             except Exception as err:  # noqa: BLE001
-                _LOGGER.warning("Could not fetch index history: %s", err)
+                _LOGGER.warning("[%s] Could not fetch index history: %s", uan, err)
                 data["index_history"] = {}
         else:
             data["meter"] = {}
@@ -165,19 +205,19 @@ class HidroelectricaCoordinator(DataUpdateCoordinator):
             data["meter_estimates"] = {}
             data["index_history"] = {}
 
-        # Usage — rolling 12-month window (usageyear parameter is ignored by the API)
+        # Usage
         try:
             usage_raw = await self._api.get_usage()
             data["usage"] = _parse_usage(usage_raw)
         except Exception as err:  # noqa: BLE001
-            _LOGGER.warning("Could not fetch usage data: %s", err)
+            _LOGGER.warning("[%s] Could not fetch usage data: %s", uan, err)
             data["usage"] = {}
 
         # Invoice history
         try:
             data["invoice_history"] = await self._api.get_invoice_history()
         except Exception as err:  # noqa: BLE001
-            _LOGGER.warning("Could not fetch invoice history: %s", err)
+            _LOGGER.warning("[%s] Could not fetch invoice history: %s", uan, err)
             data["invoice_history"] = []
 
         return data

@@ -39,6 +39,7 @@ class HidroelectricaAuth:
         self._username = username
         self._password = password
         self.csrf_token: str = ""
+        self.contracts: list[dict] = []  # [{address_id, utility_account_number, name}]
 
     # ------------------------------------------------------------------
     # Public API
@@ -143,7 +144,12 @@ class HidroelectricaAuth:
                 return False
 
             self.csrf_token = csrf
-            _LOGGER.debug("Hidroelectrica login successful, CSRF token acquired")
+            self.contracts = _extract_contracts(dashboard_html)
+            _LOGGER.debug(
+                "Hidroelectrica login successful, CSRF token acquired, %d contract(s): %s",
+                len(self.contracts),
+                [c["name"] for c in self.contracts],
+            )
             return True
 
         except aiohttp.ClientError as err:
@@ -182,3 +188,81 @@ def _extract_hidden(html: str, name: str) -> str:
         re.IGNORECASE,
     )
     return match.group(1) if match else ""
+
+
+def _extract_contracts(html: str) -> list[dict]:
+    """Parse the account/contract list from Dashboard.aspx HTML.
+
+    The portal renders a custom dropdown as ``<li role='listitem' data-id=UAN Addressid=ADDR>``
+    with the friendly name (including UAN) inside the ``<a>`` element.
+    The hidden ``<select id="ddlAddress">`` options are also server-rendered and used as fallback.
+    """
+    contracts: list[dict] = []
+
+    # Primary: parse <li> custom dropdown — server-rendered with friendly name, UAN, addressId
+    for li_m in re.finditer(
+        r"<li\b[^>]*\bdata-id=(\d+)\s+Addressid=(\d+)[^>]*>\s*<a[^>]*>([^<\n]+)",
+        html,
+        re.IGNORECASE,
+    ):
+        uan = li_m.group(1).strip()
+        address_id = li_m.group(2).strip()
+        name = li_m.group(3).strip()
+        if uan and address_id:
+            contracts.append({"address_id": address_id, "utility_account_number": uan, "name": name})
+
+    if contracts:
+        _LOGGER.debug(
+            "_extract_contracts: found %d contract(s): %s",
+            len(contracts),
+            [c["name"] for c in contracts],
+        )
+        return contracts
+
+    # Fallback: parse <option> elements in <select id="ddlAddress">
+    # Value format: accountNumber:addressId:x:lat:lon:zipcode:utilityAccountNumber:...
+    select_m = re.search(
+        r'<select[^>]+\bid="ddlAddress"[^>]*>(.*?)</select>',
+        html,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if not select_m:
+        _LOGGER.debug(
+            "_extract_contracts: neither <li data-id> nor <select id='ddlAddress'> found"
+        )
+        return contracts
+
+    select_html = select_m.group(1)
+    for option_m in re.finditer(
+        r'<option([^>]*)>([^<]*)</option>',
+        select_html,
+        re.IGNORECASE,
+    ):
+        option_attrs = option_m.group(1)
+        option_text = option_m.group(2).strip()
+
+        val_m = re.search(r'\bvalue="([^"]+)"', option_attrs, re.IGNORECASE)
+        if not val_m:
+            continue
+
+        parts = val_m.group(1).split(":")
+        if len(parts) < 7:
+            continue
+
+        address_id = parts[1].strip()
+        uan = parts[6].strip()
+
+        if not address_id or not uan:
+            continue
+
+        name = re.sub(r"\s*\(Default\)", "", option_text, flags=re.IGNORECASE).strip()
+        name = name or uan
+
+        contracts.append({"address_id": address_id, "utility_account_number": uan, "name": name})
+
+    _LOGGER.debug(
+        "_extract_contracts: found %d contract(s) (fallback): %s",
+        len(contracts),
+        [c["name"] for c in contracts],
+    )
+    return contracts
