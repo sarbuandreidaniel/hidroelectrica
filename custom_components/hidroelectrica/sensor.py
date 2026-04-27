@@ -144,6 +144,7 @@ SENSOR_DESCRIPTIONS: tuple[HidroelectricaSensorEntityDescription, ...] = (
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_registry_enabled_default=False,
         value_fn=lambda d: d.get("meter", {}).get("produced_index"),
     ),
     HidroelectricaSensorEntityDescription(
@@ -278,6 +279,10 @@ class HidroelectricaSensor(
             self.coordinator.data.get(self._uan, {})
         )
 
+    @property
+    def available(self) -> bool:
+        return super().available and self.native_value is not None
+
 
 # ------------------------------------------------------------------
 # Unpaid invoice sensor
@@ -404,6 +409,10 @@ class HidroelectricaConsumptionHistorySensor(
         return entries
 
     @property
+    def available(self) -> bool:
+        return super().available and bool(self._get_year_entries())
+
+    @property
     def native_value(self) -> float | None:
         entries = self._get_year_entries()
         if not entries:
@@ -467,6 +476,8 @@ class HidroelectricaInvoiceHistorySensor(
         )
         self._attr_translation_placeholders = {"year": str(year)}
         self._attr_icon = "mdi:solar-power" if produced else "mdi:file-document-multiple"
+        if produced:
+            self._attr_entity_registry_enabled_default = False
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, uan)},
             name=device_name,
@@ -493,6 +504,10 @@ class HidroelectricaInvoiceHistorySensor(
             filtered,
             key=lambda inv: _to_date(inv.get("Date")) or date.min,
         )
+
+    @property
+    def available(self) -> bool:
+        return super().available and bool(self._get_year_invoices())
 
     @property
     def native_value(self) -> float | None:
