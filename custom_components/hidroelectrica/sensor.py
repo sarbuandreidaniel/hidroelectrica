@@ -17,11 +17,13 @@ from homeassistant.components.sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfEnergy
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceEntryType
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import slugify
 
+from . import HidroelectricaConfigEntry
 from .const import DOMAIN
 from .coordinator import HidroelectricaCoordinator
 
@@ -186,13 +188,11 @@ SENSOR_DESCRIPTIONS: tuple[HidroelectricaSensorEntityDescription, ...] = (
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: HidroelectricaConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Hidroelectrica sensors from a config entry."""
-    coordinator: HidroelectricaCoordinator = hass.data[DOMAIN][entry.entry_id][
-        "coordinator"
-    ]
+    coordinator = entry.runtime_data
     current_year = date.today().year
     entities: list = []
 
@@ -201,33 +201,33 @@ async def async_setup_entry(
         device_name = contract["name"]  # already includes UAN e.g. "Casuta Noastra (8000863947)"
         for description in SENSOR_DESCRIPTIONS:
             entities.append(
-                HidroelectricaSensor(coordinator, entry, description, uan, device_name)
+                HidroelectricaSensor(coordinator, description, uan, device_name)
             )
         entities.append(
-            HidroelectricaUnpaidInvoiceSensor(coordinator, entry, uan, device_name)
+            HidroelectricaUnpaidInvoiceSensor(coordinator, uan, device_name)
         )
         entities += [
             HidroelectricaConsumptionHistorySensor(
-                coordinator, entry, current_year, uan, device_name
+                coordinator, current_year, uan, device_name
             ),
             HidroelectricaConsumptionHistorySensor(
-                coordinator, entry, current_year - 1, uan, device_name
+                coordinator, current_year - 1, uan, device_name
             ),
         ]
         entities += [
             HidroelectricaInvoiceHistorySensor(
-                coordinator, entry, current_year, uan, device_name, produced=False
+                coordinator, current_year, uan, device_name, produced=False
             ),
             HidroelectricaInvoiceHistorySensor(
-                coordinator, entry, current_year - 1, uan, device_name, produced=False
+                coordinator, current_year - 1, uan, device_name, produced=False
             ),
         ]
         entities += [
             HidroelectricaInvoiceHistorySensor(
-                coordinator, entry, current_year, uan, device_name, produced=True
+                coordinator, current_year, uan, device_name, produced=True
             ),
             HidroelectricaInvoiceHistorySensor(
-                coordinator, entry, current_year - 1, uan, device_name, produced=True
+                coordinator, current_year - 1, uan, device_name, produced=True
             ),
         ]
 
@@ -250,7 +250,6 @@ class HidroelectricaSensor(
     def __init__(
         self,
         coordinator: HidroelectricaCoordinator,
-        entry: ConfigEntry,
         description: HidroelectricaSensorEntityDescription,
         uan: str,
         device_name: str,
@@ -267,7 +266,7 @@ class HidroelectricaSensor(
             name=device_name,
             manufacturer="Hidroelectrica S.A.",
             model="iHidro Portal",
-            entry_type="service",
+            entry_type=DeviceEntryType.SERVICE,
         )
 
     @property
@@ -305,7 +304,6 @@ class HidroelectricaUnpaidInvoiceSensor(
     def __init__(
         self,
         coordinator: HidroelectricaCoordinator,
-        entry: ConfigEntry,
         uan: str,
         device_name: str,
     ) -> None:
@@ -320,7 +318,7 @@ class HidroelectricaUnpaidInvoiceSensor(
             name=device_name,
             manufacturer="Hidroelectrica S.A.",
             model="iHidro Portal",
-            entry_type="service",
+            entry_type=DeviceEntryType.SERVICE,
         )
 
     @property
@@ -368,7 +366,6 @@ class HidroelectricaConsumptionHistorySensor(
     def __init__(
         self,
         coordinator: HidroelectricaCoordinator,
-        entry: ConfigEntry,
         year: int,
         uan: str,
         device_name: str,
@@ -387,7 +384,7 @@ class HidroelectricaConsumptionHistorySensor(
             name=device_name,
             manufacturer="Hidroelectrica S.A.",
             model="iHidro Portal",
-            entry_type="service",
+            entry_type=DeviceEntryType.SERVICE,
         )
 
     def _get_year_entries(self) -> list[dict]:
@@ -454,7 +451,6 @@ class HidroelectricaInvoiceHistorySensor(
     def __init__(
         self,
         coordinator: HidroelectricaCoordinator,
-        entry: ConfigEntry,
         year: int,
         uan: str,
         device_name: str,
@@ -483,7 +479,7 @@ class HidroelectricaInvoiceHistorySensor(
             name=device_name,
             manufacturer="Hidroelectrica S.A.",
             model="iHidro Portal",
-            entry_type="service",
+            entry_type=DeviceEntryType.SERVICE,
         )
 
     def _get_year_invoices(self) -> list[dict]:

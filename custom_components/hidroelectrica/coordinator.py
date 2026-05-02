@@ -7,39 +7,47 @@ from datetime import timedelta
 
 import aiohttp
 
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import HidroelectricaAPI
 from .auth import HidroelectricaAuth
-from .const import DEFAULT_UPDATE_INTERVAL, DOMAIN
+from .const import CONF_PASSWORD, CONF_USERNAME, DEFAULT_UPDATE_INTERVAL, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class HidroelectricaCoordinator(DataUpdateCoordinator):
+class HidroelectricaCoordinator(DataUpdateCoordinator[dict]):
     """Fetches and caches data from the iHidro portal."""
 
-    def __init__(self, hass: HomeAssistant, username: str, password: str) -> None:
+    def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry) -> None:
         super().__init__(
             hass,
             _LOGGER,
             name=DOMAIN,
+            config_entry=config_entry,
             update_interval=timedelta(seconds=DEFAULT_UPDATE_INTERVAL),
         )
-        self._username = username
-        self._password = password
+        self._username: str = config_entry.data[CONF_USERNAME]
+        self._password: str = config_entry.data[CONF_PASSWORD]
         self._session: aiohttp.ClientSession | None = None
         self._auth: HidroelectricaAuth | None = None
         self._api: HidroelectricaAPI | None = None
         # POD info is stable — cache per contract (keyed by utility_account_number)
         self._pod_info_cache: dict[str, dict | None] = {}
+        # Staged meter values set by number entities, consumed by the submit button
+        self.pending_meter_index: dict[str, dict[str, int]] = {}
 
     @property
     def api(self) -> "HidroelectricaAPI | None":
         """Expose the underlying API client (used by button entities)."""
         return self._api
+
+    def get_pod_info(self, uan: str) -> dict | None:
+        """Return cached POD info for the given utility account number."""
+        return self._pod_info_cache.get(uan)
 
     # ------------------------------------------------------------------
     # DataUpdateCoordinator interface
@@ -72,7 +80,7 @@ class HidroelectricaCoordinator(DataUpdateCoordinator):
                 # Invalidate token so the next poll triggers a full re-login
                 if self._auth:
                     self._auth.csrf_token = ""
-                raise UpdateFailed(f"Session expired (HTTP {err.status})") from err
+                raise ConfigEntryAuthFailed(f"Session expired (HTTP {err.status})") from err
             raise UpdateFailed(f"HTTP error {err.status}") from err
         except aiohttp.ClientError as err:
             raise UpdateFailed(f"Connection error: {err}") from err

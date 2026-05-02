@@ -1,16 +1,19 @@
 """Button platform for Hidroelectrica integration — meter index submission."""
 
 import logging
+from datetime import date
 
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.device_registry import DeviceEntryType
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import slugify
 
+from . import HidroelectricaConfigEntry
 from .const import DOMAIN
 from .coordinator import HidroelectricaCoordinator
 
@@ -19,15 +22,13 @@ _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    config_entry: ConfigEntry,
+    config_entry: HidroelectricaConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Hidroelectrica button entities."""
-    coordinator: HidroelectricaCoordinator = hass.data[DOMAIN][config_entry.entry_id][
-        "coordinator"
-    ]
+    coordinator = config_entry.runtime_data
     entities = [
-        HidroelectricaSubmitMeterReadingButton(coordinator, config_entry, contract)
+        HidroelectricaSubmitMeterReadingButton(coordinator, contract)
         for contract in (coordinator.data or {}).get("contracts", [])
     ]
     async_add_entities(entities)
@@ -43,11 +44,9 @@ class HidroelectricaSubmitMeterReadingButton(CoordinatorEntity, ButtonEntity):
     def __init__(
         self,
         coordinator: HidroelectricaCoordinator,
-        config_entry: ConfigEntry,
         contract: dict,
     ) -> None:
         super().__init__(coordinator)
-        self.config_entry = config_entry
         self._contract = contract
         self._uan = contract["utility_account_number"]
         self._device_name = contract["name"]  # already includes UAN e.g. "Casuta Noastra (8000863947)"
@@ -64,17 +63,44 @@ class HidroelectricaSubmitMeterReadingButton(CoordinatorEntity, ButtonEntity):
             name=self._device_name,
             manufacturer="Hidroelectrica S.A.",
             model="iHidro Portal",
-            entry_type="service",
+            entry_type=DeviceEntryType.SERVICE,
         )
 
     @property
     def available(self) -> bool:
-        """Available when meter reading data is loaded for this contract."""
-        return bool(
-            (self.coordinator.data or {})
-            .get(self._uan, {})
-            .get("meter_readings")
+        """Available when meter reading data is loaded and inside the submission window."""
+        meter_readings: list[dict] = (
+            (self.coordinator.data or {}).get(self._uan, {}).get("meter_readings") or []
         )
+        if not meter_readings:
+            return False
+        return self._is_in_submission_period(meter_readings)
+
+    def _is_in_submission_period(self, meter_readings: list[dict]) -> bool:
+        """Return True when today falls inside the self-reading submission window.
+
+        Uses the ``Calendar`` deadline from any relevant register (1.8.0 preferred).
+        Window is from the 1st of that month through the Calendar date (inclusive).
+        """
+        calendar_str: str | None = None
+        for reading in meter_readings:
+            if reading.get("Registers") == "1.8.0":
+                calendar_str = reading.get("Calendar")
+                break
+        if calendar_str is None and meter_readings:
+            calendar_str = meter_readings[0].get("Calendar")
+        if not calendar_str:
+            return True  # no deadline info — don't restrict
+        try:
+            parts = calendar_str.strip().split("/")
+            if len(parts) != 3:
+                return True
+            deadline = date(int(parts[2]), int(parts[1]), int(parts[0]))
+        except (ValueError, IndexError):
+            return True  # unparseable — don't restrict
+        today = date.today()
+        window_start = deadline.replace(day=1)
+        return window_start <= today <= deadline
 
     async def async_press(self) -> None:
         """Submit all staged meter readings to the portal."""
@@ -88,19 +114,14 @@ class HidroelectricaSubmitMeterReadingButton(CoordinatorEntity, ButtonEntity):
                 "Cannot submit: no meter reading data available"
             )
 
-        pod_info = coordinator._pod_info_cache.get(uan)  # noqa: SLF001
+        pod_info = coordinator.get_pod_info(uan)
         if not pod_info:
             raise HomeAssistantError("Cannot submit: POD info not available")
 
         installation = pod_info.get("installation", "")
         pod = pod_info.get("pod", "")
 
-        pending: dict = (
-            self.hass.data.get(DOMAIN, {})
-            .get(self.config_entry.entry_id, {})
-            .get("pending_meter_index", {})
-            .get(uan, {})
-        )
+        pending: dict = coordinator.pending_meter_index.setdefault(uan, {})
 
         # Estimates mirror what the number entities display as their default value.
         # Use them as fallback so what's submitted matches what the user sees in HA.

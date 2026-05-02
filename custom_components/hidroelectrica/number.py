@@ -1,15 +1,18 @@
 """Number platform for Hidroelectrica integration — meter index input staging."""
 
 import logging
+from datetime import date
 
 from homeassistant.components.number import NumberEntity, NumberMode
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.device_registry import DeviceEntryType
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import slugify
 
+from . import HidroelectricaConfigEntry
 from .const import DOMAIN
 from .coordinator import HidroelectricaCoordinator
 
@@ -24,19 +27,17 @@ _REGISTER_KEYS = {
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    config_entry: ConfigEntry,
+    config_entry: HidroelectricaConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Hidroelectrica number entities."""
-    coordinator: HidroelectricaCoordinator = hass.data[DOMAIN][config_entry.entry_id][
-        "coordinator"
-    ]
+    coordinator = config_entry.runtime_data
 
     def build_entities_for_contract(
         contract: dict, readings: list[dict]
     ) -> list[NumberEntity]:
         return [
-            HidroelectricaEnergyIndexNumber(coordinator, config_entry, reading, contract)
+            HidroelectricaEnergyIndexNumber(coordinator, reading, contract)
             for reading in readings
             if reading.get("Registers") in _REGISTER_KEYS
         ]
@@ -84,12 +85,10 @@ class HidroelectricaEnergyIndexNumber(CoordinatorEntity, NumberEntity):
     def __init__(
         self,
         coordinator: HidroelectricaCoordinator,
-        config_entry: ConfigEntry,
         meter_reading: dict,
         contract: dict,
     ) -> None:
         super().__init__(coordinator)
-        self.config_entry = config_entry
         self._register = meter_reading.get("Registers", "")
         self._pod = meter_reading.get("POD", "")
         self._uan = contract["utility_account_number"]
@@ -118,7 +117,7 @@ class HidroelectricaEnergyIndexNumber(CoordinatorEntity, NumberEntity):
             name=f"{self._contract['name']}",  # already includes UAN e.g. "Casuta Noastra (8000863947)"
             manufacturer="Hidroelectrica S.A.",
             model="iHidro Portal",
-            entry_type="service",
+            entry_type=DeviceEntryType.SERVICE,
         )
 
     @property
@@ -137,12 +136,7 @@ class HidroelectricaEnergyIndexNumber(CoordinatorEntity, NumberEntity):
         not with PrevMRResult. We mirror that behaviour so the displayed value stays
         fresh after submission (once the coordinator refreshes).
         """
-        pending = (
-            self.hass.data.get(DOMAIN, {})
-            .get(self.config_entry.entry_id, {})
-            .get("pending_meter_index", {})
-            .get(self._uan, {})
-        )
+        pending = self.coordinator.pending_meter_index.get(self._uan, {})
         if self._register in pending:
             return float(pending[self._register])
         # Use the portal's estimate, fall back to last confirmed index
@@ -164,8 +158,32 @@ class HidroelectricaEnergyIndexNumber(CoordinatorEntity, NumberEntity):
 
     @property
     def available(self) -> bool:
-        """Available when we have meter reading data for this register."""
-        return bool(self._current_reading)
+        """Available only when we have reading data AND today is inside the submission window.
+
+        The submission window runs from the 1st of the month indicated by the
+        ``Calendar`` field through (and including) that ``Calendar`` date.
+        When ``Calendar`` is absent or unparseable we fall back to the
+        data-presence check so the entity stays usable.
+        """
+        if not self._current_reading:
+            return False
+        return self._is_in_submission_period()
+
+    def _is_in_submission_period(self) -> bool:
+        """Return True when today falls inside the self-reading submission window."""
+        calendar_str: str | None = self._current_reading.get("Calendar")
+        if not calendar_str:
+            return True  # no deadline info — don't restrict
+        try:
+            parts = calendar_str.strip().split("/")
+            if len(parts) != 3:
+                return True
+            deadline = date(int(parts[2]), int(parts[1]), int(parts[0]))
+        except (ValueError, IndexError):
+            return True  # unparseable — don't restrict
+        today = date.today()
+        window_start = deadline.replace(day=1)
+        return window_start <= today <= deadline
 
     @property
     def extra_state_attributes(self) -> dict:
@@ -185,8 +203,5 @@ class HidroelectricaEnergyIndexNumber(CoordinatorEntity, NumberEntity):
 
     async def async_set_native_value(self, value: float) -> None:
         """Stage the index value. Press Submit to send it to the portal."""
-        pending_all = self.hass.data[DOMAIN][self.config_entry.entry_id][
-            "pending_meter_index"
-        ]
-        pending_all.setdefault(self._uan, {})[self._register] = int(value)
+        self.coordinator.pending_meter_index.setdefault(self._uan, {})[self._register] = int(value)
         self.async_write_ha_state()

@@ -8,18 +8,25 @@
           "username": "Email or Username",
           "password": "Password"
         }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate Hidroelectrica",
+        "description": "Your session has expired. Please re-enter the password for {username}.",
+        "data": {
+          "password": "Password"
+        }
       }
     },
     "error": {
       "missing_username": "Username is required",
       "missing_password": "Password is required",
-      "invalid_auth": "Invalid credentials. Please check your username and password.",
-      "cannot_connect": "Failed to connect to Hidroelectrica services",
-      "unknown": "An unexpected error occurred"
+      "invalid_auth": "[%key:common::config_flow::error::invalid_auth%]",
+      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
+      "unknown": "[%key:common::config_flow::error::unknown%]"
     },
     "abort": {
-      "already_configured": "Hidroelectrica is already configured",
-      "already_in_progress": "Configuration is already in progress"
+      "already_configured": "[%key:common::config_flow::abort::already_configured_device%]",
+      "already_in_progress": "[%key:common::config_flow::abort::already_in_progress%]"
     }
   },
   "entity": {

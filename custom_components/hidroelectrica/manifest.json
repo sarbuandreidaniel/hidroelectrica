@@ -6,6 +6,7 @@
   ],
   "config_flow": true,
   "documentation": "https://github.com/sarbuandreidaniel/hidroelectrica",
+  "issue_tracker": "https://github.com/sarbuandreidaniel/hidroelectrica/issues",
   "integration_type": "service",
   "iot_class": "cloud_polling",
   "requirements": [],

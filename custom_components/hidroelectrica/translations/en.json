@@ -8,6 +8,13 @@
           "username": "Email or Username",
           "password": "Password"
         }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate Hidroelectrica",
+        "description": "Your session has expired. Please re-enter the password for {username}.",
+        "data": {
+          "password": "Password"
+        }
       }
     },
     "error": {
