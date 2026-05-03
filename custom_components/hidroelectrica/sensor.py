@@ -15,7 +15,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import UnitOfEnergy
+from homeassistant.const import EntityCategory, UnitOfEnergy
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceEntryType
 from homeassistant.helpers.entity import DeviceInfo
@@ -156,15 +156,24 @@ SENSOR_DESCRIPTIONS: tuple[HidroelectricaSensorEntityDescription, ...] = (
         value_fn=lambda d: _fmt_date(d.get("meter", {}).get("reading_date")),
     ),
     HidroelectricaSensorEntityDescription(
+        key="uan",
+        translation_key="uan",
+        icon="mdi:identifier",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda d: d.get("uan"),
+    ),
+    HidroelectricaSensorEntityDescription(
         key="meter_serial",
         translation_key="meter_serial",
         icon="mdi:counter",
+        entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda d: d.get("meter", {}).get("serial_number"),
     ),
     HidroelectricaSensorEntityDescription(
         key="pod",
         translation_key="pod",
         icon="mdi:map-marker",
+        entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda d: d.get("meter", {}).get("pod"),
     ),
     # ── Usage ─────────────────────────────────────────────────────────

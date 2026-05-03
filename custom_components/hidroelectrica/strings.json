@@ -55,6 +55,7 @@
       "last_reading_date": {"name": "Last Reading Date"},
       "meter_serial": {"name": "Meter Serial Number"},
       "pod": {"name": "POD"},
+      "uan": {"name": "Utility Account Number"},
       "last_month_kwh": {"name": "Previous Month Consumption"},
       "consumption_history_year": {
         "name": "Electricity Consumption {year}"

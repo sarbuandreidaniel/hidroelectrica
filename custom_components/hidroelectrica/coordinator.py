@@ -185,7 +185,7 @@ class HidroelectricaCoordinator(DataUpdateCoordinator[dict]):
             self._pod_info_cache[uan] = await self._api.get_pod_info()
 
         pod_info = self._pod_info_cache[uan]
-        data: dict = {}
+        data: dict = {"uan": uan}
 
         # Billing
         try:
