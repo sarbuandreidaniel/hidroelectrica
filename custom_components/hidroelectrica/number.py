@@ -158,32 +158,37 @@ class HidroelectricaEnergyIndexNumber(CoordinatorEntity, NumberEntity):
 
     @property
     def available(self) -> bool:
-        """Available only when we have reading data AND today is inside the submission window.
-
-        The submission window runs from the 1st of the month indicated by the
-        ``Calendar`` field through (and including) that ``Calendar`` date.
-        When ``Calendar`` is absent or unparseable we fall back to the
-        data-presence check so the entity stays usable.
-        """
+        """Available only when we have reading data AND today is inside the submission window."""
         if not self._current_reading:
             return False
         return self._is_in_submission_period()
 
-    def _is_in_submission_period(self) -> bool:
-        """Return True when today falls inside the self-reading submission window."""
-        calendar_str: str | None = self._current_reading.get("Calendar")
-        if not calendar_str:
-            return True  # no deadline info — don't restrict
+    def _parse_date(self, date_str: str | None) -> date | None:
+        """Parse a DD/MM/YYYY date string, returning None on failure."""
+        if not date_str:
+            return None
         try:
-            parts = calendar_str.strip().split("/")
+            parts = date_str.strip().split("/")
             if len(parts) != 3:
-                return True
-            deadline = date(int(parts[2]), int(parts[1]), int(parts[0]))
+                return None
+            return date(int(parts[2]), int(parts[1]), int(parts[0]))
         except (ValueError, IndexError):
-            return True  # unparseable — don't restrict
+            return None
+
+    def _is_in_submission_period(self) -> bool:
+        """Return True when today falls inside the submission window.
+
+        The authoritative window is provided by the portal via the hidden
+        ``hdnopendate`` and ``hdnclosedate`` fields on the SelfMeterReading
+        page, scraped and stored in coordinator data each refresh.
+        """
         today = date.today()
-        window_start = deadline.replace(day=1)
-        return window_start <= today <= deadline
+        window = (self.coordinator.data or {}).get("meter_reading_window", {})
+        open_date = self._parse_date(window.get("open_date"))
+        close_date = self._parse_date(window.get("close_date"))
+        if open_date is None or close_date is None:
+            return True  # window dates unavailable — don't restrict
+        return open_date <= today <= close_date
 
     @property
     def extra_state_attributes(self) -> dict:

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from datetime import date
 from typing import Any
 
@@ -204,6 +205,30 @@ class HidroelectricaAPI:
             f"{COMMON_URL}/HandleAddressDropDownChange",
             {"ddlAddressSelectedValue": address_id},
         )
+
+    async def get_meter_reading_window(self) -> dict[str, str | None]:
+        """Return the submission window dates from the SelfMeterReading page HTML.
+
+        The page embeds two hidden fields:
+        - ``hdnopendate``  — the date when the next submission window opens (DD/MM/YYYY)
+        - ``hdnclosedate`` — the date when that window closes (DD/MM/YYYY)
+
+        These represent the **upcoming** (or currently open) submission window
+        as configured by the portal, and are the authoritative source for the
+        window bounds.
+        """
+        async with self._session.get(SELF_METER_URL) as resp:
+            resp.raise_for_status()
+            html = await resp.text()
+
+        def _extract(field: str) -> str | None:
+            m = re.search(rf'id="{re.escape(field)}"[^>]*value="([^"]*)"', html)
+            return m.group(1) if m else None
+
+        return {
+            "open_date": _extract("hdnopendate"),
+            "close_date": _extract("hdnclosedate"),
+        }
 
     # ------------------------------------------------------------------
     # Internal

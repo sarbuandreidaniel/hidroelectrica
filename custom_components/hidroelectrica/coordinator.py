@@ -147,6 +147,17 @@ class HidroelectricaCoordinator(DataUpdateCoordinator[dict]):
 
         result: dict = {"contracts": contracts}
 
+        # Fetch the submission window once per refresh (not per contract — it's
+        # account-level and requires the SelfMeterReading page to be loaded).
+        try:
+            result["meter_reading_window"] = await self._api.get_meter_reading_window()
+            _LOGGER.debug(
+                "Hidroelectrica: meter reading window: %s", result["meter_reading_window"]
+            )
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("Could not fetch meter reading window: %s", err)
+            result["meter_reading_window"] = {"open_date": None, "close_date": None}
+
         for contract in contracts:
             uan = contract["utility_account_number"]
             address_id = contract["address_id"]

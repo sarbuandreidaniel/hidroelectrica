@@ -68,7 +68,7 @@ class HidroelectricaSubmitMeterReadingButton(CoordinatorEntity, ButtonEntity):
 
     @property
     def available(self) -> bool:
-        """Available when meter reading data is loaded and inside the submission window."""
+        """Available when meter reading data is loaded and inside a submission window."""
         meter_readings: list[dict] = (
             (self.coordinator.data or {}).get(self._uan, {}).get("meter_readings") or []
         )
@@ -76,31 +76,32 @@ class HidroelectricaSubmitMeterReadingButton(CoordinatorEntity, ButtonEntity):
             return False
         return self._is_in_submission_period(meter_readings)
 
-    def _is_in_submission_period(self, meter_readings: list[dict]) -> bool:
-        """Return True when today falls inside the self-reading submission window.
-
-        Uses the ``Calendar`` deadline from any relevant register (1.8.0 preferred).
-        Window is from the 1st of that month through the Calendar date (inclusive).
-        """
-        calendar_str: str | None = None
-        for reading in meter_readings:
-            if reading.get("Registers") == "1.8.0":
-                calendar_str = reading.get("Calendar")
-                break
-        if calendar_str is None and meter_readings:
-            calendar_str = meter_readings[0].get("Calendar")
-        if not calendar_str:
-            return True  # no deadline info — don't restrict
+    def _parse_date(self, date_str: str | None) -> date | None:
+        """Parse a DD/MM/YYYY date string, returning None on failure."""
+        if not date_str:
+            return None
         try:
-            parts = calendar_str.strip().split("/")
+            parts = date_str.strip().split("/")
             if len(parts) != 3:
-                return True
-            deadline = date(int(parts[2]), int(parts[1]), int(parts[0]))
+                return None
+            return date(int(parts[2]), int(parts[1]), int(parts[0]))
         except (ValueError, IndexError):
-            return True  # unparseable — don't restrict
+            return None
+
+    def _is_in_submission_period(self, meter_readings: list[dict]) -> bool:
+        """Return True when today falls inside the submission window.
+
+        The authoritative window is provided by the portal via the hidden
+        ``hdnopendate`` and ``hdnclosedate`` fields on the SelfMeterReading
+        page, scraped and stored in coordinator data each refresh.
+        """
         today = date.today()
-        window_start = deadline.replace(day=1)
-        return window_start <= today <= deadline
+        window = (self.coordinator.data or {}).get("meter_reading_window", {})
+        open_date = self._parse_date(window.get("open_date"))
+        close_date = self._parse_date(window.get("close_date"))
+        if open_date is None or close_date is None:
+            return True  # window dates unavailable — don't restrict
+        return open_date <= today <= close_date
 
     async def async_press(self) -> None:
         """Submit all staged meter readings to the portal."""
