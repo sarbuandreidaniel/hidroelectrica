@@ -26,6 +26,15 @@ from .const import CSRF_FIELD_NAME, DASHBOARD_URL, LOGIN_URL, PORTAL_BASE
 _LOGGER = logging.getLogger(__name__)
 
 
+class HidroelectricaServerError(Exception):
+    """Raised when the iHidro server returns a transient error.
+
+    Distinct from wrong-credential failures so the coordinator can
+    raise ``UpdateFailed`` (retry next poll) instead of
+    ``ConfigEntryAuthFailed`` (locks the entry until user action).
+    """
+
+
 class HidroelectricaAuth:
     """Manages session authentication for the iHidro portal."""
 
@@ -49,7 +58,14 @@ class HidroelectricaAuth:
         """Log in and populate ``self.csrf_token``.
 
         Returns ``True`` on success, ``False`` when credentials are wrong
-        or the portal is unreachable.
+        or 2FA is required.
+
+        Raises ``HidroelectricaServerError`` for transient server-side errors
+        (maintenance pages, ``dtException`` responses, unparseable JSON) so the
+        coordinator can convert them to ``UpdateFailed`` and retry next poll
+        instead of locking the config entry.
+
+        Raises ``aiohttp.ClientError`` for network/connection failures.
         """
         try:
             # ── Step 1: GET login page to establish the session cookie ──
@@ -95,17 +111,19 @@ class HidroelectricaAuth:
                 result = None
 
             if result is None:
-                _LOGGER.error("Hidroelectrica validateLogin returned unparseable response")
-                return False
+                _LOGGER.warning("Hidroelectrica validateLogin returned unparseable response")
+                raise HidroelectricaServerError("Unparseable login response")
 
             # Failure indicator: {"dtException": [{"StatusCode": "0", ...}]}
+            # This is a transient server-side error — raise so the coordinator
+            # can convert it to UpdateFailed and retry at the next poll.
             if isinstance(result, dict) and "dtException" in result:
                 msg = ""
                 exc = result["dtException"]
                 if isinstance(exc, list) and exc:
                     msg = exc[0].get("MessageInformation", "")
                 _LOGGER.warning("Hidroelectrica login server error: %s", msg)
-                return False
+                raise HidroelectricaServerError(msg or "Server-side login error")
 
             # Auth failure: {"dtResponse": [{"Status": "0", "Message": "..."}]}
             if isinstance(result, dict) and "dtResponse" in result:
@@ -126,11 +144,11 @@ class HidroelectricaAuth:
 
             # Success: result is a list where [0] has DashboardOption
             if not isinstance(result, list) or not result:
-                _LOGGER.error(
+                _LOGGER.warning(
                     "Hidroelectrica validateLogin returned unexpected structure: %s",
                     str(result)[:200],
                 )
-                return False
+                raise HidroelectricaServerError("Unexpected login response structure")
 
             # ── Step 4: Fetch Dashboard to extract CSRF token ──
             async with self._session.get(DASHBOARD_URL) as resp:
@@ -152,9 +170,10 @@ class HidroelectricaAuth:
             )
             return True
 
-        except aiohttp.ClientError as err:
-            _LOGGER.error("Network error during Hidroelectrica login: %s", err)
-            return False
+        except HidroelectricaServerError:
+            raise
+        except aiohttp.ClientError:
+            raise
 
     def ajax_headers(self) -> dict[str, str]:
         """Return the headers required for every AJAX/JSON request."""

@@ -13,7 +13,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import HidroelectricaAPI
-from .auth import HidroelectricaAuth
+from .auth import HidroelectricaAuth, HidroelectricaServerError
 from .const import CONF_PASSWORD, CONF_USERNAME, DEFAULT_UPDATE_INTERVAL, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
@@ -129,7 +129,14 @@ class HidroelectricaCoordinator(DataUpdateCoordinator[dict]):
             self._pod_info_cache = {}  # reset cache for new session
 
         if not self._auth.csrf_token:
-            ok = await self._auth.async_login()
+            try:
+                ok = await self._auth.async_login()
+            except HidroelectricaServerError as err:
+                raise UpdateFailed(
+                    f"Transient iHidro server error — will retry: {err}"
+                ) from err
+            except aiohttp.ClientError as err:
+                raise UpdateFailed(f"Connection error during login: {err}") from err
             if not ok:
                 raise ConfigEntryAuthFailed(
                     "Could not log in to iHidro — check username and password"
