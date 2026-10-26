@@ -4,7 +4,9 @@ import logging
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 
+from .const import DOMAIN
 from .coordinator import HidroelectricaCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -37,3 +39,19 @@ async def async_unload_entry(hass: HomeAssistant, entry: HidroelectricaConfigEnt
         await entry.runtime_data.async_close()
 
     return unload_ok
+
+
+async def async_remove_config_entry_device(
+    hass: HomeAssistant,
+    entry: HidroelectricaConfigEntry,
+    device_entry: dr.DeviceEntry,
+) -> bool:
+    """Allow removing a device only when its contract is no longer on the account."""
+    active_uans = {
+        contract["utility_account_number"]
+        for contract in (entry.runtime_data.data or {}).get("contracts", [])
+    }
+    return not any(
+        domain == DOMAIN and uan in active_uans
+        for domain, uan in device_entry.identifiers
+    )
