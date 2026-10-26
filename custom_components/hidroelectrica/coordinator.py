@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import timedelta
+from datetime import date, timedelta
 
 import aiohttp
 
@@ -11,6 +11,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
 
 from .api import HidroelectricaAPI
 from .auth import HidroelectricaAuth, HidroelectricaServerError
@@ -48,6 +49,26 @@ class HidroelectricaCoordinator(DataUpdateCoordinator[dict]):
     def get_pod_info(self, uan: str) -> dict | None:
         """Return cached POD info for the given utility account number."""
         return self._pod_info_cache.get(uan)
+
+    def is_submission_window_open(self) -> bool:
+        """Return True when today falls inside the meter reading submission window.
+
+        The window comes from the portal's hidden ``hdnopendate`` and
+        ``hdnclosedate`` fields on the SelfMeterReading page.  Near the end of
+        a window the portal already advances ``hdnopendate`` to the next cycle
+        while ``hdnclosedate`` still points at the current one (e.g. open
+        22/11, close 26/10).  An open date after the close date therefore means
+        the current window is open until the close date.
+        """
+        window = (self.data or {}).get("meter_reading_window") or {}
+        open_date = _parse_portal_date(window.get("open_date"))
+        close_date = _parse_portal_date(window.get("close_date"))
+        if open_date is None or close_date is None:
+            return True  # window dates unavailable — don't restrict
+        today = dt_util.now().date()
+        if open_date > close_date:
+            return today <= close_date
+        return open_date <= today <= close_date
 
     # ------------------------------------------------------------------
     # DataUpdateCoordinator interface
@@ -376,6 +397,19 @@ def _parse_usage(raw: dict) -> dict:
         result["monthly_max_cost"] = _safe_float(t.get("Highest"))
 
     return result
+
+
+def _parse_portal_date(date_str: str | None) -> date | None:
+    """Parse a DD/MM/YYYY date string, returning None on failure."""
+    if not date_str:
+        return None
+    try:
+        parts = date_str.strip().split("/")
+        if len(parts) != 3:
+            return None
+        return date(int(parts[2]), int(parts[1]), int(parts[0]))
+    except (ValueError, IndexError):
+        return None
 
 
 def _safe_int(value: object) -> int | None:

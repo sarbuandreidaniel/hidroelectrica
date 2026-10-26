@@ -1,7 +1,6 @@
 """Button platform for Hidroelectrica integration — meter index submission."""
 
 import logging
-from datetime import date
 
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
@@ -74,34 +73,7 @@ class HidroelectricaSubmitMeterReadingButton(CoordinatorEntity, ButtonEntity):
         )
         if not meter_readings:
             return False
-        return self._is_in_submission_period(meter_readings)
-
-    def _parse_date(self, date_str: str | None) -> date | None:
-        """Parse a DD/MM/YYYY date string, returning None on failure."""
-        if not date_str:
-            return None
-        try:
-            parts = date_str.strip().split("/")
-            if len(parts) != 3:
-                return None
-            return date(int(parts[2]), int(parts[1]), int(parts[0]))
-        except (ValueError, IndexError):
-            return None
-
-    def _is_in_submission_period(self, meter_readings: list[dict]) -> bool:
-        """Return True when today falls inside the submission window.
-
-        The authoritative window is provided by the portal via the hidden
-        ``hdnopendate`` and ``hdnclosedate`` fields on the SelfMeterReading
-        page, scraped and stored in coordinator data each refresh.
-        """
-        today = date.today()
-        window = (self.coordinator.data or {}).get("meter_reading_window", {})
-        open_date = self._parse_date(window.get("open_date"))
-        close_date = self._parse_date(window.get("close_date"))
-        if open_date is None or close_date is None:
-            return True  # window dates unavailable — don't restrict
-        return open_date <= today <= close_date
+        return self.coordinator.is_submission_window_open()
 
     async def async_press(self) -> None:
         """Submit all staged meter readings to the portal."""
