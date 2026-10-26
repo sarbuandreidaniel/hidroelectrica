@@ -192,7 +192,7 @@ async def run_tests(session: aiohttp.ClientSession, username: str, password: str
 
     print("\n📡 BillDashboard / BindUnpaidInvoicesdetailsinGrid")
     try:
-        data = await post(session, csrf_token, f"{BILL_DASHBOARD_URL}/BindUnpaidInvoicesdetailsinGrid", {})
+        data = await post(session, csrf_token, f"{BILL_DASHBOARD_URL}/BindUnpaidInvoicesdetailsinGrid", {"billing_type": "unpaidinvoice"})
         print("✅ OK")
         _print("   ", data)
     except Exception as e:

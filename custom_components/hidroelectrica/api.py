@@ -55,8 +55,11 @@ class HidroelectricaAPI:
 
     async def get_unpaid_invoices(self) -> list[dict]:
         """Return list of unpaid invoices."""
+        # The portal answers HTTP 500 unless ``billing_type`` is sent
+        # ("installment" returns installment plans instead).
         result = await self._post(
-            f"{BILL_DASHBOARD_URL}/BindUnpaidInvoicesdetailsinGrid", {}
+            f"{BILL_DASHBOARD_URL}/BindUnpaidInvoicesdetailsinGrid",
+            {"billing_type": "unpaidinvoice"},
         )
         return result if isinstance(result, list) else []
 
